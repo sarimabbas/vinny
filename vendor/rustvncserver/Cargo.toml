@@ -1,0 +1,52 @@
+[package]
+name = "rustvncserver"
+version = "2.2.1"
+edition = "2021"
+rust-version = "1.90"
+authors = ["Dustin McAfee"]
+license = "Apache-2.0"
+description = "Pure Rust VNC (RFB) server implementation with full protocol support"
+repository = "https://github.com/dustinmcafee/rustvncserver"
+keywords = ["vnc", "rfb", "remote-desktop", "server"]
+categories = ["network-programming", "multimedia"]
+readme = "README.md"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+tokio = { version = "1", features = ["rt-multi-thread", "sync", "time", "net", "io-util", "macros"] }
+bytes = "1"
+log = "0.4"
+thiserror = "1.0"       # Error handling
+des = "0.8"             # DES encryption for VNC auth
+rand = "0.8"            # Random number generation for auth
+flate2 = "1.0"          # Zlib compression for Tight encoding
+rfb-encodings = "0.1.7"   # RFB encoding implementations
+
+[features]
+default = []
+turbojpeg = ["rfb-encodings/turbojpeg"]   # Enable TurboJPEG for better JPEG performance (requires libjpeg-turbo)
+debug-logging = ["rfb-encodings/debug-logging"]  # Enable verbose debug logging (shows client IPs, connection details)
+
+[dev-dependencies]
+tokio-test = "0.4"
+env_logger = "0.11"
+
+[[example]]
+name = "simple_server"
+path = "examples/simple_server.rs"
+
+[[example]]
+name = "headless_server"
+path = "examples/headless_server.rs"
+
+[profile.release]
+lto = true              # Link-time optimization
+codegen-units = 1       # Better optimization
+opt-level = 3           # Maximum optimization
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+targets = ["x86_64-unknown-linux-gnu", "x86_64-apple-darwin", "x86_64-pc-windows-msvc", "aarch64-unknown-linux-gnu"]
