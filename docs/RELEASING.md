@@ -22,7 +22,8 @@ Vinny releases are built, signed, notarized, published, and added to Homebrew by
 5. Open and merge a pull request. Required CI must pass.
 6. In GitHub, open **Actions → Release → Run workflow**, select `main`, and enter the version without `v`, such as `0.2.0`.
 7. Wait for the unprivileged `build` job to pass, then approve the protected `release` environment deployment.
-8. Confirm that signing, notarization, GitHub publishing, and the Homebrew cask update all succeed.
+8. Confirm that signing, notarization, and GitHub publishing succeed.
+9. Follow the workflow summary link to open the generated Homebrew tap branch as a pull request. Review and merge it to publish the cask update.
 
 Equivalent command-line trigger:
 
@@ -30,7 +31,9 @@ Equivalent command-line trigger:
 gh workflow run Release --repo sarimabbas/vinny --ref main -f version=0.2.0
 ```
 
-The workflow checks that the requested version matches both Cargo and the app plist. The build job has no release credentials. The signing job receives credentials only after approval and does not check out or execute repository build scripts.
+The workflow checks that the requested version matches both Cargo and the app plist and has never been published. The build job has no release credentials. The signing job receives credentials only after approval and does not check out or execute repository build scripts.
+
+GitHub release archives and their checksum files are immutable. The workflow never replaces an asset or reuses a tag. The Homebrew deploy key can prepare a branch in the tap, but protected `main` accepts the update only through a reviewed pull request.
 
 ## Verification
 
@@ -58,8 +61,12 @@ The Homebrew deploy key is write-enabled only for `sarimabbas/homebrew-tap`. The
 
 Do not commit certificates, API private keys, passwords, or deploy keys. Keep the App Store Connect `.p8` in an encrypted backup because Apple allows it to be downloaded only once. Rotate a credential immediately if it may have been exposed.
 
-## Retrying and correcting a release
+## Failures and corrections
 
-The workflow can safely retry the same version after a partial failure: it replaces the release archive and updates the cask checksum. Do not delete or rewrite a published release tag. If users may have downloaded a bad release, publish a new patch version instead.
+A version cannot be rerun after its GitHub release has been created. Never replace an archive or delete or rewrite a published tag.
+
+- If signing, notarization, or release creation fails before publication, fix the workflow and run the same version again.
+- If only the Homebrew branch or pull request fails, update the cask from the already-published archive; do not rebuild the release.
+- If a published binary is wrong, publish a new patch version.
 
 `scripts/release.sh` is a local fallback for signing and notarizing an archive. The GitHub workflow is the official publication path.
