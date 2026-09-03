@@ -4,7 +4,7 @@
 
 Vinny is an early-stage project. Security fixes are provided for the latest published version only.
 
-The repository's security boundaries and prioritized risks are documented in [vinny-threat-model.md](vinny-threat-model.md).
+The repository's security boundaries and prioritized risks are documented in [threat-model.md](threat-model.md).
 
 ## Reporting a vulnerability
 
