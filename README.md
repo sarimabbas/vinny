@@ -73,17 +73,18 @@ The smoke launches `Vinny.app`, verifies that port 5900 is loopback-only, comple
 - [x] Guided Screen Recording and Accessibility permission setup
 - [x] Configurable IPv4 and IPv6 listeners with a loopback default
 - [x] Bounded concurrent clients, handshake timeouts, and task cleanup
-- [ ] Authenticated, encrypted transport
-- [ ] Bidirectional clipboard synchronization
-- [ ] Remote cursor shape updates
-- [ ] Dynamic framebuffer and display-layout updates
-- [ ] Extended keyboard events for layout-independent input
-- [ ] View-only and single-client sharing policies
-- [ ] RFB 3.3 and 3.7 compatibility
+- [x] Optional VeNCrypt/X.509 TLS transport with password authentication
+- [x] Bidirectional legacy and extended UTF-8 clipboard synchronization
+- [x] Remote cursor pseudo-encoding
+- [x] Dynamic framebuffer and display-layout updates
+- [x] Extended keyboard events for layout-independent input
+- [x] View-only and configurable client-sharing policies
+- [x] RFB 3.3, 3.7, and 3.8 compatibility
+- [x] Fence, ContinuousUpdates, LastRect, DesktopName, and ExtendedDesktopSize extensions
 - [ ] Login-window control
 
 > [!WARNING]
-> The RFB server currently has no built-in authentication or encryption. Vinny defaults to loopback. Anyone who can reach a non-loopback listener can view the screen and control input.
+> Vinny defaults to an unauthenticated loopback listener for compatibility. Enable “Encrypted + password” before exposing a listener when your VNC viewer supports VeNCrypt/X509Plain. Otherwise use a trusted network or secure tunnel. View-only mode blocks remote input but still exposes screen contents.
 
 ## Implementation
 
@@ -91,7 +92,7 @@ The smoke launches `Vinny.app`, verifies that port 5900 is loopback-only, comple
 - [`rustvncserver`](https://crates.io/crates/rustvncserver) — Apache-2.0 RFB server
 - [`enigo`](https://crates.io/crates/enigo) — MIT input injection
 
-`rustvncserver` 2.2.1 binds all interfaces in its public `listen(port)` method. A vendored one-method patch adds `listen_on(SocketAddr)` so Vinny can bind to the exact address configured in the app.
+Vinny vendors `rustvncserver` 2.2.1 to add exact-address binding, bounded connection lifecycles, standards-compliant version and security negotiation, VeNCrypt/X.509 TLS, and common RFB extensions used by modern viewers.
 
 All resolved Rust dependencies are permissively licensed; there are no GPL or AGPL dependencies.
 

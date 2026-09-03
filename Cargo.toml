@@ -17,6 +17,8 @@ objc2-core-foundation = { version = "0.3.2", features = ["CFDictionary", "CFNumb
 objc2-core-graphics = { version = "0.3.2", features = ["CGDirectDisplay", "CGWindow"] }
 rustvncserver = { path = "vendor/rustvncserver" }
 screencapturekit = "8.0.1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
 tokio = { version = "1.47", features = ["macros", "rt-multi-thread", "sync"] }
 
 [profile.release]

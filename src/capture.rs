@@ -3,7 +3,7 @@ use screencapturekit::cv::CVPixelBufferLockFlags;
 use screencapturekit::prelude::*;
 use tokio::sync::mpsc;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Geometry {
     pub origin_x: i32,
     pub origin_y: i32,
@@ -100,6 +100,21 @@ fn display_geometry(display: &SCDisplay, max_width: u32) -> Geometry {
     }
 }
 
+pub fn geometry(
+    display_index: usize,
+    max_width: u32,
+) -> Result<Geometry, Box<dyn std::error::Error>> {
+    let content = SCShareableContent::get()?;
+    let displays = content.displays();
+    let display = displays.get(display_index).ok_or_else(|| {
+        format!(
+            "display {display_index} does not exist (found {})",
+            displays.len()
+        )
+    })?;
+    Ok(display_geometry(display, max_width))
+}
+
 pub fn start(
     display_index: usize,
     max_width: u32,
@@ -124,7 +139,7 @@ pub fn start(
         .with_height(u32::from(geometry.capture_height))
         .with_pixel_format(PixelFormat::BGRA)
         .with_scales_to_fit(true)
-        .with_shows_cursor(true)
+        .with_shows_cursor(false)
         .with_queue_depth(2)
         .with_fps(fps);
     let mut stream = SCStream::new(&filter, &config);

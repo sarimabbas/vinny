@@ -23,3 +23,4 @@ jobs:
       - run: cargo test --manifest-path vendor/rustvncserver/Cargo.toml
       - run: cargo test --manifest-path vendor/rfb-encodings/Cargo.toml --lib
       - run: cargo clippy --locked --all-targets -- -D warnings
+      - run: cargo clippy --manifest-path vendor/rustvncserver/Cargo.toml --all-targets -- -D warnings

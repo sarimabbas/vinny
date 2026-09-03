@@ -19,9 +19,9 @@ tokio = { version = "1", features = ["rt-multi-thread", "sync", "time", "net", "
 bytes = "1"
 log = "0.4"
 thiserror = "1.0"       # Error handling
-des = "0.8"             # DES encryption for VNC auth
-rand = "0.8"            # Random number generation for auth
 flate2 = "1.0"          # Zlib compression for Tight encoding
+rcgen = "0.14"
+tokio-rustls = "0.26"
 rfb-encodings = { path = "../rfb-encodings" }   # RFB encoding implementations
 
 [features]

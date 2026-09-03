@@ -1,5 +1,6 @@
 import AppKit
 import CoreText
+import Security
 import SwiftUI
 
 @_silgen_name("vinny_permission_bits") private func permissionBits() -> Int32
@@ -11,13 +12,13 @@ import SwiftUI
 @_silgen_name("vinny_server_status") private func serverStatus(_ id: UInt64) -> Int32
 @_silgen_name("vinny_start_server") private func startServer(
     _ id: UInt64,
-    _ listen: UnsafePointer<CChar>,
-    _ port: UInt16,
-    _ display: UInt,
-    _ maxWidth: UInt32,
-    _ fps: UInt32
+    _ configuration: UnsafePointer<CChar>
 ) -> Bool
 @_silgen_name("vinny_stop_server") private func stopServer(_ id: UInt64)
+@_silgen_name("vinny_broadcast_clipboard") private func broadcastClipboard(
+    _ bytes: UnsafePointer<UInt8>?,
+    _ length: Int
+)
 @_silgen_name("vinny_stop_all_servers") private func stopAllServers()
 
 private let paper = Color(red: 244 / 255, green: 242 / 255, blue: 236 / 255)
@@ -25,6 +26,54 @@ private let ink = Color(red: 23 / 255, green: 23 / 255, blue: 25 / 255)
 private let blue = Color(red: 62 / 255, green: 159 / 255, blue: 255 / 255)
 private let sun = Color(red: 243 / 255, green: 200 / 255, blue: 92 / 255)
 private let green = Color(red: 100 / 255, green: 213 / 255, blue: 138 / 255)
+private var clipboardChangeCount = NSPasteboard.general.changeCount
+
+@_cdecl("vinny_set_clipboard")
+public func vinnySetClipboard(_ bytes: UnsafePointer<UInt8>?, _ length: Int) {
+    guard let bytes else { return }
+    let text = String(decoding: UnsafeBufferPointer(start: bytes, count: length), as: UTF8.self)
+    DispatchQueue.main.async {
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(text, forType: .string)
+        clipboardChangeCount = pasteboard.changeCount
+    }
+}
+
+private let passwordService = "run.lil.vinny.vnc-password"
+
+private func storedPassword(for id: UInt64) -> String {
+    let query: [String: Any] = [
+        kSecClass as String: kSecClassGenericPassword,
+        kSecAttrService as String: passwordService,
+        kSecAttrAccount as String: String(id),
+        kSecReturnData as String: true,
+        kSecMatchLimit as String: kSecMatchLimitOne,
+    ]
+    var result: CFTypeRef?
+    guard SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess,
+          let data = result as? Data else { return "" }
+    return String(data: data, encoding: .utf8) ?? ""
+}
+
+private func storePassword(_ password: String, for id: UInt64) {
+    let query: [String: Any] = [
+        kSecClass as String: kSecClassGenericPassword,
+        kSecAttrService as String: passwordService,
+        kSecAttrAccount as String: String(id),
+    ]
+    if password.isEmpty {
+        SecItemDelete(query as CFDictionary)
+        return
+    }
+    let attributes: [String: Any] = [kSecValueData as String: Data(password.utf8)]
+    if SecItemUpdate(query as CFDictionary, attributes as CFDictionary) == errSecItemNotFound {
+        var item = query
+        item[kSecValueData as String] = Data(password.utf8)
+        SecItemAdd(item as CFDictionary, nil)
+    }
+}
+
 private let portFormatter: NumberFormatter = {
     let formatter = NumberFormatter()
     formatter.numberStyle = .none
@@ -65,6 +114,20 @@ private func connectedDisplays(captureOrder: Bool) -> [DisplayOption] {
     }
 }
 
+private enum SharingPolicy: String, Codable, CaseIterable {
+    case followClient
+    case alwaysShared
+    case singleClient
+
+    var label: String {
+        switch self {
+        case .followClient: "Follow viewer request"
+        case .alwaysShared: "Always allow sharing"
+        case .singleClient: "One viewer only"
+        }
+    }
+}
+
 private struct ServerConfiguration: Codable, Identifiable, Equatable {
     var id: UInt64
     var display: Int
@@ -73,6 +136,51 @@ private struct ServerConfiguration: Codable, Identifiable, Equatable {
     var fps: Int
     var address: String
     var enabled: Bool
+    var sharingPolicy: SharingPolicy
+    var viewOnly: Bool
+    var secure: Bool
+
+    init(
+        id: UInt64,
+        display: Int,
+        port: Int,
+        maxWidth: Int,
+        fps: Int,
+        address: String,
+        enabled: Bool,
+        sharingPolicy: SharingPolicy = .followClient,
+        viewOnly: Bool = false,
+        secure: Bool = false
+    ) {
+        self.id = id
+        self.display = display
+        self.port = port
+        self.maxWidth = maxWidth
+        self.fps = fps
+        self.address = address
+        self.enabled = enabled
+        self.sharingPolicy = sharingPolicy
+        self.viewOnly = viewOnly
+        self.secure = secure
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, display, port, maxWidth, fps, address, enabled, sharingPolicy, viewOnly, secure
+    }
+
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        id = try values.decode(UInt64.self, forKey: .id)
+        display = try values.decode(Int.self, forKey: .display)
+        port = try values.decode(Int.self, forKey: .port)
+        maxWidth = try values.decode(Int.self, forKey: .maxWidth)
+        fps = try values.decode(Int.self, forKey: .fps)
+        address = try values.decode(String.self, forKey: .address)
+        enabled = try values.decode(Bool.self, forKey: .enabled)
+        sharingPolicy = try values.decodeIfPresent(SharingPolicy.self, forKey: .sharingPolicy) ?? .followClient
+        viewOnly = try values.decodeIfPresent(Bool.self, forKey: .viewOnly) ?? false
+        secure = try values.decodeIfPresent(Bool.self, forKey: .secure) ?? false
+    }
 
     static let primary = ServerConfiguration(
         id: 1,
@@ -85,6 +193,28 @@ private struct ServerConfiguration: Codable, Identifiable, Equatable {
     )
 }
 
+private struct RuntimeServerConfiguration: Encodable {
+    let address: String
+    let port: Int
+    let display: Int
+    let maxWidth: Int
+    let fps: Int
+    let sharingPolicy: SharingPolicy
+    let viewOnly: Bool
+    let password: String?
+
+    init(configuration: ServerConfiguration, password: String?) {
+        address = configuration.address
+        port = configuration.port
+        display = configuration.display
+        maxWidth = configuration.maxWidth
+        fps = configuration.fps
+        sharingPolicy = configuration.sharingPolicy
+        viewOnly = configuration.viewOnly
+        self.password = password
+    }
+}
+
 private final class VinnyModel: ObservableObject {
     @Published var screenRecording = false
     @Published var accessibility = false
@@ -92,6 +222,7 @@ private final class VinnyModel: ObservableObject {
     @Published var servers: [ServerConfiguration]
     @Published var statuses: [UInt64: Int32] = [:]
     @Published var errors: [UInt64: String] = [:]
+    @Published var passwords: [UInt64: String]
 
     private let defaultsKey = "serverConfigurations"
     private var attempted = Set<UInt64>()
@@ -100,6 +231,7 @@ private final class VinnyModel: ObservableObject {
 
     init() {
         displays = connectedDisplays(captureOrder: false)
+        passwords = [:]
         if let data = UserDefaults.standard.data(forKey: defaultsKey),
            let saved = try? JSONDecoder().decode([ServerConfiguration].self, from: data),
            !saved.isEmpty {
@@ -107,6 +239,7 @@ private final class VinnyModel: ObservableObject {
         } else {
             servers = [.primary]
         }
+        passwords = Dictionary(uniqueKeysWithValues: servers.map { ($0.id, storedPassword(for: $0.id)) })
         refresh()
         timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
             self?.refresh()
@@ -143,6 +276,7 @@ private final class VinnyModel: ObservableObject {
                 attempted.remove(server.id)
             }
         }
+        pollClipboard()
         for server in servers {
             statuses[server.id] = serverStatus(server.id)
             if ready, server.enabled, statuses[server.id] == 0, !attempted.contains(server.id) {
@@ -166,7 +300,7 @@ private final class VinnyModel: ObservableObject {
         var port = 5900
         while usedPorts.contains(port) { port += 1 }
         let display = min(servers.count, max(displays.count - 1, 0))
-        servers.append(ServerConfiguration(
+        let server = ServerConfiguration(
             id: UInt64.random(in: 2...UInt64.max),
             display: display,
             port: port,
@@ -174,7 +308,9 @@ private final class VinnyModel: ObservableObject {
             fps: 20,
             address: "127.0.0.1",
             enabled: false
-        ))
+        )
+        servers.append(server)
+        passwords[server.id] = ""
         save()
     }
 
@@ -187,17 +323,23 @@ private final class VinnyModel: ObservableObject {
 
         guard configuration.enabled, ready else { return }
         guard validate(configuration) else { return }
-
-        let started = configuration.address.withCString {
-            startServer(
-                configuration.id,
-                $0,
-                UInt16(configuration.port),
-                UInt(configuration.display),
-                UInt32(configuration.maxWidth),
-                UInt32(configuration.fps)
-            )
+        let password = passwords[configuration.id] ?? ""
+        if configuration.secure && password.isEmpty {
+            errors[configuration.id] = "Enter a password for encrypted connections."
+            return
         }
+        storePassword(configuration.secure ? password : "", for: configuration.id)
+        let runtime = RuntimeServerConfiguration(
+            configuration: configuration,
+            password: configuration.secure ? password : nil
+        )
+
+        guard let data = try? JSONEncoder().encode(runtime),
+              let json = String(data: data, encoding: .utf8) else {
+            errors[configuration.id] = "Could not encode this server configuration."
+            return
+        }
+        let started = json.withCString { startServer(configuration.id, $0) }
         if started {
             statuses[configuration.id] = serverStatus(configuration.id)
         } else {
@@ -211,6 +353,8 @@ private final class VinnyModel: ObservableObject {
         statuses[configuration.id] = nil
         errors[configuration.id] = nil
         attempted.remove(configuration.id)
+        passwords[configuration.id] = nil
+        storePassword("", for: configuration.id)
         if servers.isEmpty { servers = [.primary] }
         save()
     }
@@ -243,6 +387,15 @@ private final class VinnyModel: ObservableObject {
             return false
         }
         return true
+    }
+
+    private func pollClipboard() {
+        let pasteboard = NSPasteboard.general
+        guard pasteboard.changeCount != clipboardChangeCount else { return }
+        clipboardChangeCount = pasteboard.changeCount
+        guard let text = pasteboard.string(forType: .string) else { return }
+        let bytes = Array(text.utf8)
+        bytes.withUnsafeBufferPointer { broadcastClipboard($0.baseAddress, $0.count) }
     }
 
     private func reloadDisplays() {
@@ -326,6 +479,7 @@ private struct VinnySecondaryButtonStyle: ButtonStyle {
 
 private struct ServerCard: View {
     @Binding var configuration: ServerConfiguration
+    @Binding var password: String
     let number: Int
     let displays: [DisplayOption]
     let status: Int32
@@ -371,6 +525,28 @@ private struct ServerCard: View {
                 settingRow("Frame rate") {
                     Stepper("\(configuration.fps) FPS", value: $configuration.fps, in: 1...60)
                 }
+                settingRow("Connections") {
+                    Menu {
+                        ForEach(SharingPolicy.allCases, id: \.self) { policy in
+                            Button(policy.label) { configuration.sharingPolicy = policy }
+                        }
+                    } label: {
+                        Text(configuration.sharingPolicy.label)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
+                settingRow("Input") {
+                    Toggle("View only", isOn: $configuration.viewOnly)
+                }
+                settingRow("Security") {
+                    Toggle("Encrypted + password", isOn: $configuration.secure)
+                }
+                if configuration.secure {
+                    settingRow("Password") {
+                        SecureField("Required", text: $password)
+                            .textFieldStyle(.roundedBorder)
+                    }
+                }
                 settingRow("Listen on") {
                     HStack(spacing: 8) {
                         TextField("127.0.0.1", text: $configuration.address)
@@ -384,8 +560,10 @@ private struct ServerCard: View {
                             .accessibilityLabel("Port")
                     }
                 }
-                if configuration.address != "127.0.0.1" && configuration.address != "::1" {
-                    Text("Vinny has no VNC authentication. Use non-loopback addresses only on trusted networks.")
+                if !configuration.secure
+                    && configuration.address != "127.0.0.1"
+                    && configuration.address != "::1" {
+                    Text("This listener is unauthenticated and plaintext. Use only trusted networks or a secure tunnel.")
                         .font(.custom("Maple Mono", size: 11))
                         .foregroundColor(ink.opacity(0.62))
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -489,6 +667,7 @@ private struct ContentView: View {
                         if let binding = binding(for: server.id) {
                             ServerCard(
                                 configuration: binding,
+                                password: passwordBinding(for: server.id),
                                 number: index + 1,
                                 displays: model.displays,
                                 status: model.statuses[server.id] ?? 0,
@@ -526,6 +705,13 @@ private struct ContentView: View {
                     .frame(width: 104, height: 104)
             }
         }
+    }
+
+    private func passwordBinding(for id: UInt64) -> Binding<String> {
+        Binding(
+            get: { model.passwords[id] ?? "" },
+            set: { model.passwords[id] = $0 }
+        )
     }
 
     private func binding(for id: UInt64) -> Binding<ServerConfiguration>? {

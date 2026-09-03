@@ -6,7 +6,7 @@ Thanks for helping improve Vinny.
 
 - Use [GitHub Discussions](https://github.com/sarimabbas/vinny/discussions) for usage questions if discussions are enabled.
 - Report security vulnerabilities privately as described in [SECURITY.md](SECURITY.md).
-- Remember that VNC authentication and encryption are not currently implemented; that limitation is documented rather than a new vulnerability.
+- Security reports should distinguish the default plaintext loopback mode from the optional VeNCrypt/X.509 TLS mode.
 
 ## Development
 
