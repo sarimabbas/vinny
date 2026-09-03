@@ -22,7 +22,7 @@ jobs:
       version: ${{ steps.version.outputs.version }}
 
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -43,6 +43,10 @@ jobs:
           [[ "$REQUESTED_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
           [[ "$REQUESTED_VERSION" == "$cargo_version" ]]
           [[ "$REQUESTED_VERSION" == "$plist_version" ]]
+          if git ls-remote --exit-code --tags origin "refs/tags/v${REQUESTED_VERSION}" >/dev/null 2>&1; then
+            echo "Version v${REQUESTED_VERSION} is already published; release versions are immutable." >&2
+            exit 1
+          fi
           echo "version=$REQUESTED_VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Test
@@ -57,7 +61,7 @@ jobs:
       - name: Pack unsigned app
         run: ditto -c -k --keepParent dist/Vinny.app "$RUNNER_TEMP/vinny-unsigned.zip"
 
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: vinny-unsigned-${{ steps.version.outputs.version }}
           path: ${{ runner.temp }}/vinny-unsigned.zip
@@ -75,7 +79,7 @@ jobs:
       VERSION: ${{ needs.build.outputs.version }}
 
     steps:
-      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: vinny-unsigned-${{ needs.build.outputs.version }}
           path: ${{ runner.temp }}/input
@@ -151,7 +155,10 @@ jobs:
           ditto -c -k --keepParent "$app" "$archive"
           codesign --verify --deep --strict --verbose=2 "$app"
           spctl --assess --type execute --verbose=2 "$app"
+          checksum="${archive}.sha256"
+          (cd "$(dirname "$archive")" && shasum -a 256 "$(basename "$archive")" > "$(basename "$checksum")")
           echo "ARCHIVE=$archive" >> "$GITHUB_ENV"
+          echo "CHECKSUM=$checksum" >> "$GITHUB_ENV"
 
       - name: Remove Apple credentials
         if: always()
@@ -161,22 +168,17 @@ jobs:
           security list-keychains -d user -s login.keychain-db
           rm -f "$RUNNER_TEMP/developer-id.p12" "$RUNNER_TEMP"/AuthKey_*.p8 "$RUNNER_TEMP/vinny-notarization.zip"
 
-      - name: Publish GitHub release
+      - name: Publish immutable GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          tag="v${VERSION}"
-          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            gh release upload "$tag" "$ARCHIVE" --repo "$GITHUB_REPOSITORY" --clobber
-          else
-            gh release create "$tag" "$ARCHIVE" \
-              --repo "$GITHUB_REPOSITORY" \
-              --target "$GITHUB_SHA" \
-              --title "Vinny ${VERSION}" \
-              --generate-notes
-          fi
+          gh release create "v${VERSION}" "$ARCHIVE" "$CHECKSUM" \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "Vinny ${VERSION}" \
+            --generate-notes
 
-      - name: Update Homebrew cask
+      - name: Prepare Homebrew cask update
         env:
           HOMEBREW_TAP_DEPLOY_KEY_B64: ${{ secrets.HOMEBREW_TAP_DEPLOY_KEY_B64 }}
         shell: bash
@@ -212,7 +214,14 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add Casks/vinny.rb
           git commit -m "chore(cask): update Vinny to ${VERSION}"
-          GIT_SSH_COMMAND="ssh -i $key -o IdentitiesOnly=yes" git push origin main
+          branch="vinny-${VERSION}"
+          GIT_SSH_COMMAND="ssh -i $key -o IdentitiesOnly=yes" git push origin "HEAD:refs/heads/${branch}"
+
+          {
+            echo "### Homebrew cask update"
+            echo "Open and merge the protected tap pull request:"
+            echo "https://github.com/sarimabbas/homebrew-tap/compare/main...${branch}?expand=1"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Remove Homebrew credentials
         if: always()

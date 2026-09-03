@@ -29,6 +29,6 @@
   <key>NSHighResolutionCapable</key>
   <true/>
   <key>NSScreenCaptureUsageDescription</key>
-  <string>Vinny uses screen capture to show this Mac through your private, authenticated connection.</string>
+  <string>Vinny uses screen capture to show this Mac through a VNC connection you configure.</string>
 </dict>
 </plist>

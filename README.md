@@ -1,5 +1,8 @@
 # Vinny
 
+[![CI](https://github.com/sarimabbas/vinny/actions/workflows/ci.yml/badge.svg)](https://github.com/sarimabbas/vinny/actions/workflows/ci.yml)
+[![Latest release](https://img.shields.io/github/v/release/sarimabbas/vinny)](https://github.com/sarimabbas/vinny/releases/latest)
+
 Vinny is a small VNC server for macOS. It captures configured displays with ScreenCaptureKit, serves them through standard RFB, and forwards keyboard and pointer events through macOS input APIs.
 
 Vinny is a menu-bar app. Open it, grant Screen Recording and Accessibility once, then connect any VNC client. The default server listens only on `127.0.0.1:5900`.
@@ -45,7 +48,7 @@ open dist/Vinny.app
 
 The app opens a guided permission window. After both permissions are granted, enabled servers start automatically. Add another server to share another display—ports advance from `5900` by default. Vinny appears in the Dock while its window is open; closing the window returns it to a menu-bar-only app without stopping any servers.
 
-## Package
+## Package locally
 
 Create an ad-hoc signed app for local development:
 
@@ -89,6 +92,10 @@ The smoke launches `Vinny.app`, verifies that port 5900 is loopback-only, comple
 
 All resolved Rust dependencies are permissively licensed; there are no GPL or AGPL dependencies.
 
+## Contributing and releases
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the development workflow, [docs/RELEASING.md](docs/RELEASING.md) for the protected release process, and [SECURITY.md](SECURITY.md) for private vulnerability reporting.
+
 ## License
 
-Apache-2.0. Vendored components retain their original notices and licenses.
+[Apache-2.0](LICENSE). Vendored components retain their original notices and licenses.
