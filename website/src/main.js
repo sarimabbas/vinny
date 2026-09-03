@@ -25,6 +25,8 @@ class PetRuntime {
     this.stage = stage;
     this.context = canvas.getContext("2d", { alpha: true });
     this.image = new Image();
+    this.outlineImage = document.createElement("canvas");
+    this.pixelRatio = 1;
     this.state = "idle";
     this.frame = 0;
     this.frameStarted = performance.now();
@@ -41,6 +43,13 @@ class PetRuntime {
     this.nextTransmissionAt = performance.now() + 9000;
     this.reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
     this.image.addEventListener("load", () => {
+      this.outlineImage.width = this.image.naturalWidth;
+      this.outlineImage.height = this.image.naturalHeight;
+      const outlineContext = this.outlineImage.getContext("2d");
+      outlineContext.drawImage(this.image, 0, 0);
+      outlineContext.globalCompositeOperation = "source-in";
+      outlineContext.fillStyle = "#171719";
+      outlineContext.fillRect(0, 0, this.outlineImage.width, this.outlineImage.height);
       this.stage.classList.add("is-ready");
       this.resize();
       requestAnimationFrame((time) => this.tick(time));
@@ -50,12 +59,15 @@ class PetRuntime {
 
   resize() {
     const bounds = this.stage.getBoundingClientRect();
-    const ratio = Math.min(window.devicePixelRatio || 1, 2);
+    const ratio = Math.min(window.devicePixelRatio || 1, 3);
+    this.pixelRatio = ratio;
     this.canvas.width = Math.max(1, Math.round(bounds.width * ratio));
     this.canvas.height = Math.max(1, Math.round(bounds.height * ratio));
     this.canvas.style.width = `${bounds.width}px`;
     this.canvas.style.height = `${bounds.height}px`;
     this.context.setTransform(ratio, 0, 0, ratio, 0, 0);
+    this.context.imageSmoothingEnabled = true;
+    this.context.imageSmoothingQuality = "high";
     this.target = this.clampPosition(this.target, bounds);
     this.position = this.clampPosition(this.position, bounds);
   }
@@ -347,11 +359,13 @@ class PetRuntime {
     const y = this.position.y * bounds.height - height / 2;
     const definition = states[this.state];
 
-    const destinationWidth = Math.round(width);
-    const destinationHeight = Math.round(height);
-    const drawFrame = (offsetX = 0, offsetY = 0) => {
+    const destinationWidth = Math.round(width * this.pixelRatio) / this.pixelRatio;
+    const destinationHeight = Math.round(height * this.pixelRatio) / this.pixelRatio;
+    const alignedX = Math.round(x * this.pixelRatio) / this.pixelRatio;
+    const alignedY = Math.round(y * this.pixelRatio) / this.pixelRatio;
+    const drawFrame = (source, offsetX = 0, offsetY = 0) => {
       this.context.drawImage(
-        this.image,
+        source,
         this.frame * CELL_WIDTH,
         definition.row * CELL_HEIGHT,
         CELL_WIDTH,
@@ -365,19 +379,19 @@ class PetRuntime {
 
     this.context.save();
     this.context.translate(
-      Math.round(x) + (definition.flipX ? destinationWidth : 0),
-      Math.round(y),
+      alignedX + (definition.flipX ? destinationWidth : 0),
+      alignedY,
     );
     if (definition.flipX) this.context.scale(-1, 1);
 
-    this.context.filter = "brightness(0)";
+    const outlineWidth = 2 / this.pixelRatio;
     for (const [offsetX, offsetY] of [
-      [-1.25, 0], [1.25, 0], [0, -1.25], [0, 1.25],
-      [-1, -1], [1, -1], [-1, 1], [1, 1],
-    ]) drawFrame(offsetX, offsetY);
+      [-outlineWidth, 0], [outlineWidth, 0], [0, -outlineWidth], [0, outlineWidth],
+      [-outlineWidth, -outlineWidth], [outlineWidth, -outlineWidth],
+      [-outlineWidth, outlineWidth], [outlineWidth, outlineWidth],
+    ]) drawFrame(this.outlineImage, offsetX, offsetY);
 
-    this.context.filter = "none";
-    drawFrame();
+    drawFrame(this.image);
     if (this.transmission.active) {
       this.drawTransmission(time, destinationWidth, destinationHeight);
     }
