@@ -32,10 +32,10 @@
             <canvas id="vinny-canvas"></canvas>
           </section>
 
-          <section class="terminal" aria-label="Vinny command line example">
-            <div class="terminal-bar"><i></i><i></i><i></i><span>Terminal</span></div>
-            <pre><code><b>$</b> vinny serve
-<em>●</em> listening on 127.0.0.1:5900</code></pre>
+          <section class="terminal" aria-label="Vinny server status">
+            <div class="terminal-bar"><i></i><i></i><i></i><span>Vinny</span></div>
+            <pre><code><em>●</em> Vinny is ready
+  listening on 127.0.0.1:5900</code></pre>
           </section>
 
           <a class="github" href="https://github.com/sarimabbas/vinny">
@@ -50,37 +50,21 @@
 
     <section class="docs" aria-labelledby="docs-title">
       <div class="docs-inner">
-        <h2 id="docs-title">CLI options</h2>
-        <div class="usage"><code>vinny serve [options]</code></div>
+        <h2 id="docs-title">Ready in three steps</h2>
+        <div class="usage"><code>open -a Vinny</code></div>
 
         <dl class="options">
           <div>
-            <dt><code>--listen &lt;ip&gt;</code></dt>
-            <dd>Loopback or Tailscale address <span>127.0.0.1</span></dd>
+            <dt>Open Vinny</dt>
+            <dd>Launch it from your Applications folder.</dd>
           </div>
           <div>
-            <dt><code>--port &lt;port&gt;</code></dt>
-            <dd>VNC port from 1 to 65535 <span>5900</span></dd>
+            <dt>Allow access</dt>
+            <dd>Grant Screen Recording and Accessibility once.</dd>
           </div>
           <div>
-            <dt><code>--display &lt;index&gt;</code></dt>
-            <dd>Display to capture <span>0</span></dd>
-          </div>
-          <div>
-            <dt><code>--max-width &lt;pixels&gt;</code></dt>
-            <dd>Downscale wider displays <span>1920</span></dd>
-          </div>
-          <div>
-            <dt><code>--fps &lt;fps&gt;</code></dt>
-            <dd>Capture rate from 1 to 60 <span>20</span></dd>
-          </div>
-          <div>
-            <dt><code>--no-request</code></dt>
-            <dd>Check permissions without prompting</dd>
-          </div>
-          <div>
-            <dt><code>--parent-stdio</code></dt>
-            <dd>Stop when the parent process closes stdin</dd>
+            <dt>Connect</dt>
+            <dd>Point any local VNC client at <span>127.0.0.1:5900</span></dd>
           </div>
         </dl>
       </div>

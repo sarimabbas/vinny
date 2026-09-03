@@ -1,14 +1,14 @@
 [package]
-name = "macos-vnc-server"
+name = "vinny"
 version = "0.1.0"
 edition = "2024"
 rust-version = "1.90"
-description = "VNC server for the active macOS desktop"
+description = "Native VNC server for macOS"
 license = "Apache-2.0"
 repository = "https://github.com/sarimabbas/vinny"
 readme = "README.md"
 keywords = ["macos", "vnc", "rfb", "screencapturekit"]
-categories = ["command-line-utilities", "network-programming"]
+categories = ["network-programming"]
 
 [dependencies]
 enigo = { version = "0.6.1", default-features = false }
@@ -17,7 +17,7 @@ objc2-core-foundation = { version = "0.3.2", features = ["CFDictionary", "CFNumb
 objc2-core-graphics = { version = "0.3.2", features = ["CGWindow"] }
 rustvncserver = { path = "vendor/rustvncserver" }
 screencapturekit = "8.0.1"
-tokio = { version = "1.47", features = ["io-std", "io-util", "macros", "net", "rt-multi-thread", "signal", "sync"] }
+tokio = { version = "1.47", features = ["macros", "rt-multi-thread", "sync"] }
 
 [profile.release]
 lto = "thin"

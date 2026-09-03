@@ -2,225 +2,214 @@ mod capture;
 mod input;
 mod permissions;
 
-use permissions::Permissions;
 use rustvncserver::VncServer;
-use std::future::pending;
-use std::net::{IpAddr, Ipv4Addr, SocketAddr};
-use std::process::ExitCode;
-use std::sync::Arc;
-use tokio::io::AsyncReadExt;
-use tokio::sync::mpsc;
+use std::collections::HashMap;
+use std::ffi::CStr;
+use std::net::{IpAddr, SocketAddr};
+use std::os::raw::c_char;
+use std::sync::atomic::{AtomicU8, Ordering};
+use std::sync::{Arc, Mutex, OnceLock};
+use std::thread::JoinHandle;
+use tokio::sync::{mpsc, oneshot};
 
-const HELP: &str = "macos-vnc-server — VNC for the active macOS desktop
+static SERVERS: OnceLock<Mutex<HashMap<u64, ServerHandle>>> = OnceLock::new();
 
-USAGE
-  macos-vnc-server serve [OPTIONS]
-  macos-vnc-server doctor [--request]
-  macos-vnc-server help
+unsafe extern "C" {
+    fn vinny_run_gui();
+}
 
-SERVE OPTIONS
-  --listen <IP>         Loopback or Tailscale IP (default: 127.0.0.1)
-  --port <PORT>         VNC port, 1–65535 (default: 5900)
-  --display <INDEX>     Display index (default: 0)
-  --max-width <PIXELS>  Downscale wide displays (default: 1920)
-  --fps <FPS>           Capture rate, 1–60 (default: 20)
-  --no-request          Check permissions without prompting
-  --parent-stdio        Stop when stdin closes
-  -h, --help            Show help
-  -v, --version         Show version
-
-Only loopback and Tailscale addresses are accepted. Wildcard and LAN binds are refused.
-";
-
-#[derive(Debug)]
-struct ServeOptions {
+#[derive(Debug, Clone)]
+struct ServerConfig {
     listen: IpAddr,
     port: u16,
     display: usize,
     max_width: u32,
     fps: u32,
-    request_permissions: bool,
-    parent_stdio: bool,
 }
 
-impl Default for ServeOptions {
-    fn default() -> Self {
-        Self {
-            listen: IpAddr::V4(Ipv4Addr::LOCALHOST),
-            port: 5900,
-            display: 0,
-            max_width: 1920,
-            fps: 20,
-            request_permissions: true,
-            parent_stdio: false,
+struct ServerHandle {
+    stop: Option<oneshot::Sender<()>>,
+    thread: Option<JoinHandle<()>>,
+    status: Arc<AtomicU8>,
+}
+
+fn servers() -> &'static Mutex<HashMap<u64, ServerHandle>> {
+    SERVERS.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn vinny_permission_bits() -> i32 {
+    let status = permissions::check();
+    i32::from(status.screen_recording) | (i32::from(status.accessibility) << 1)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn vinny_request_permission(permission: i32) -> i32 {
+    match permission {
+        1 => permissions::request_screen_recording(),
+        2 => permissions::request_accessibility(),
+        _ => {}
+    }
+    vinny_permission_bits()
+}
+
+/// Writes the ScreenCaptureKit display IDs in capture-index order.
+///
+/// Pass a null buffer or zero capacity to query the number of displays.
+///
+/// # Safety
+/// When non-null, `buffer` must be valid for writes of `capacity` `u32` values.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn vinny_display_ids(buffer: *mut u32, capacity: usize) -> usize {
+    let Ok(content) = screencapturekit::prelude::SCShareableContent::get() else {
+        return 0;
+    };
+    let displays = content.displays();
+    if !buffer.is_null() {
+        for (index, display) in displays.iter().take(capacity).enumerate() {
+            unsafe { buffer.add(index).write(display.display_id()) };
         }
     }
+    displays.len()
 }
 
-#[tokio::main]
-async fn main() -> ExitCode {
-    match run().await {
-        Ok(()) => ExitCode::SUCCESS,
-        Err(message) => {
-            eprintln!("error: {message}");
-            ExitCode::FAILURE
-        }
+#[unsafe(no_mangle)]
+pub extern "C" fn vinny_server_status(id: u64) -> i32 {
+    servers()
+        .lock()
+        .expect("server lock")
+        .get(&id)
+        .map_or(0, |server| i32::from(server.status.load(Ordering::Relaxed)))
+}
+
+/// Starts or restarts a configured VNC server.
+///
+/// # Safety
+/// `listen` must point to a valid, NUL-terminated UTF-8 string for the duration
+/// of this call.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn vinny_start_server(
+    id: u64,
+    listen: *const c_char,
+    port: u16,
+    display: usize,
+    max_width: u32,
+    fps: u32,
+) -> bool {
+    if listen.is_null() || !permissions::check().granted() {
+        return false;
     }
-}
+    let Ok(listen) = unsafe { CStr::from_ptr(listen) }.to_str() else {
+        return false;
+    };
+    let Ok(config) = server_config(listen, port, display, max_width, fps) else {
+        return false;
+    };
 
-async fn run() -> Result<(), String> {
-    let mut args = std::env::args().skip(1);
-    match args.next().as_deref() {
-        Some("serve") => serve(parse_serve(args)?).await,
-        Some("doctor") => {
-            let request = match args.next().as_deref() {
-                None => false,
-                Some("--request") => true,
-                Some(other) => return Err(format!("unknown doctor option {other}")),
-            };
-            if args.next().is_some() {
-                return Err("doctor accepts only --request".into());
+    stop_server(id);
+    let (stop_tx, stop_rx) = oneshot::channel();
+    let status = Arc::new(AtomicU8::new(1));
+    let thread_status = Arc::clone(&status);
+    let thread = std::thread::spawn(move || {
+        let result = tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()
+            .map_err(|error| format!("could not start runtime: {error}"))
+            .and_then(|runtime| runtime.block_on(serve(config, stop_rx)));
+        match result {
+            Ok(()) => thread_status.store(0, Ordering::Relaxed),
+            Err(error) => {
+                eprintln!("error: {error}");
+                thread_status.store(2, Ordering::Relaxed);
             }
-            let status = permission_status(request);
-            print_permissions(status);
-            if status.granted() {
-                Ok(())
-            } else {
-                Err("permissions are incomplete".into())
-            }
         }
-        Some("help" | "--help" | "-h") | None => {
-            print!("{HELP}");
-            Ok(())
-        }
-        Some("version" | "--version" | "-v") => {
-            println!("macos-vnc-server {}", env!("CARGO_PKG_VERSION"));
-            Ok(())
-        }
-        Some(other) => Err(format!("unknown command {other}\n\n{HELP}")),
-    }
-}
-
-fn parse_serve(mut args: impl Iterator<Item = String>) -> Result<ServeOptions, String> {
-    let mut options = ServeOptions::default();
-    while let Some(arg) = args.next() {
-        match arg.as_str() {
-            "--listen" => options.listen = value(&mut args, "--listen")?,
-            "--port" => options.port = value(&mut args, "--port")?,
-            "--display" => options.display = value(&mut args, "--display")?,
-            "--max-width" => options.max_width = value(&mut args, "--max-width")?,
-            "--fps" => options.fps = value(&mut args, "--fps")?,
-            "--no-request" => options.request_permissions = false,
-            "--parent-stdio" => options.parent_stdio = true,
-            "-h" | "--help" => {
-                print!("{HELP}");
-                std::process::exit(0);
-            }
-            "-v" | "--version" => {
-                println!("macos-vnc-server {}", env!("CARGO_PKG_VERSION"));
-                std::process::exit(0);
-            }
-            _ => return Err(format!("unknown serve option {arg}")),
-        }
-    }
-    validate_listen_address(options.listen)?;
-    if options.port == 0 {
-        return Err("--port must be between 1 and 65535".into());
-    }
-    if !(1..=60).contains(&options.fps) {
-        return Err("--fps must be between 1 and 60".into());
-    }
-    if !(320..=7680).contains(&options.max_width) {
-        return Err("--max-width must be between 320 and 7680".into());
-    }
-    Ok(options)
-}
-
-fn validate_listen_address(address: IpAddr) -> Result<(), String> {
-    if address.is_loopback() || is_tailscale_address(address) {
-        Ok(())
-    } else {
-        Err("--listen must be loopback or a Tailscale address (100.64.0.0/10 or fd7a:115c:a1e0::/48)".into())
-    }
-}
-
-fn is_tailscale_address(address: IpAddr) -> bool {
-    match address {
-        IpAddr::V4(address) => {
-            let octets = address.octets();
-            octets[0] == 100 && (64..=127).contains(&octets[1])
-        }
-        IpAddr::V6(address) => address.segments()[..3] == [0xfd7a, 0x115c, 0xa1e0],
-    }
-}
-
-fn value<T: std::str::FromStr>(
-    args: &mut impl Iterator<Item = String>,
-    name: &str,
-) -> Result<T, String> {
-    args.next()
-        .ok_or_else(|| format!("{name} needs a value"))?
-        .parse()
-        .map_err(|_| format!("invalid value for {name}"))
-}
-
-fn permission_status(request: bool) -> Permissions {
-    if request {
-        permissions::request()
-    } else {
-        permissions::check()
-    }
-}
-
-fn print_permissions(status: Permissions) {
-    println!(
-        "Screen Recording: {}",
-        if status.screen_recording {
-            "granted"
-        } else {
-            "missing"
-        }
+    });
+    servers().lock().expect("server lock").insert(
+        id,
+        ServerHandle {
+            stop: Some(stop_tx),
+            thread: Some(thread),
+            status,
+        },
     );
-    println!(
-        "Accessibility: {}",
-        if status.accessibility {
-            "granted"
-        } else {
-            "missing"
-        }
-    );
-    if !status.screen_recording {
-        println!(
-            "Grant Screen Recording in System Settings → Privacy & Security, then restart this program."
-        );
-    }
-    if !status.accessibility {
-        println!("Grant Accessibility in System Settings → Privacy & Security.");
+    true
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn vinny_stop_server(id: u64) {
+    stop_server(id);
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn vinny_stop_all_servers() {
+    let ids = servers()
+        .lock()
+        .expect("server lock")
+        .keys()
+        .copied()
+        .collect::<Vec<_>>();
+    for id in ids {
+        stop_server(id);
     }
 }
 
-async fn serve(options: ServeOptions) -> Result<(), String> {
-    let status = permission_status(options.request_permissions);
-    if !status.granted() {
-        print_permissions(status);
-        if options.request_permissions {
-            if !status.screen_recording {
-                permissions::open_settings("screen");
-            } else if !status.accessibility {
-                permissions::open_settings("accessibility");
-            }
-        }
-        return Err("grant the missing permissions, then run serve again".into());
+fn stop_server(id: u64) {
+    let Some(mut server) = servers().lock().expect("server lock").remove(&id) else {
+        return;
+    };
+    if let Some(stop) = server.stop.take() {
+        let _ = stop.send(());
+    }
+    if let Some(thread) = server.thread.take() {
+        let _ = thread.join();
+    }
+}
+
+fn server_config(
+    listen: &str,
+    port: u16,
+    display: usize,
+    max_width: u32,
+    fps: u32,
+) -> Result<ServerConfig, String> {
+    let listen = listen
+        .parse::<IpAddr>()
+        .map_err(|_| "listen address is invalid")?;
+    if port == 0 {
+        return Err("port must be between 1 and 65535".into());
+    }
+    if !(1..=60).contains(&fps) {
+        return Err("FPS must be between 1 and 60".into());
+    }
+    if !(320..=7680).contains(&max_width) {
+        return Err("maximum width must be between 320 and 7680".into());
+    }
+    Ok(ServerConfig {
+        listen,
+        port,
+        display,
+        max_width,
+        fps,
+    })
+}
+
+fn main() {
+    unsafe { vinny_run_gui() };
+}
+
+async fn serve(config: ServerConfig, stop: oneshot::Receiver<()>) -> Result<(), String> {
+    if !permissions::check().granted() {
+        return Err("Screen Recording and Accessibility permissions are required".into());
     }
 
     let (frame_tx, mut frame_rx) = mpsc::channel::<Vec<u8>>(1);
-    let mut capture = capture::start(options.display, options.max_width, options.fps, frame_tx)
+    let mut capture = capture::start(config.display, config.max_width, config.fps, frame_tx)
         .map_err(|error| format!("could not start capture: {error}"))?;
     let geometry = capture.geometry;
     let (server, events) = VncServer::new(
         geometry.capture_width,
         geometry.capture_height,
-        "macOS Desktop".into(),
+        format!("Vinny Display {}", config.display + 1),
         None,
     );
     let server = Arc::new(server);
@@ -235,20 +224,21 @@ async fn serve(options: ServeOptions) -> Result<(), String> {
     });
     let input_task = tokio::spawn(input::handle_events(events, geometry));
 
-    let address = SocketAddr::new(options.listen, options.port);
+    let address = SocketAddr::new(config.listen, config.port);
     println!(
         "Serving display {} at {} ({}×{}, {} FPS)",
-        options.display, address, geometry.capture_width, geometry.capture_height, options.fps
+        config.display + 1,
+        address,
+        geometry.capture_width,
+        geometry.capture_height,
+        config.fps
     );
 
     let listen = server.listen_on(address);
     tokio::pin!(listen);
-    let parent = wait_for_parent(options.parent_stdio);
-    tokio::pin!(parent);
     let result = tokio::select! {
         result = &mut listen => result.map_err(|error| format!("VNC listener failed: {error}")),
-        result = tokio::signal::ctrl_c() => result.map_err(|error| format!("signal handler failed: {error}")),
-        () = &mut parent => Ok(()),
+        _ = stop => Ok(()),
     };
 
     capture.stop();
@@ -258,56 +248,18 @@ async fn serve(options: ServeOptions) -> Result<(), String> {
     result
 }
 
-async fn wait_for_parent(enabled: bool) {
-    if !enabled {
-        pending::<()>().await;
-    }
-    let mut stdin = tokio::io::stdin();
-    let mut buffer = [0_u8; 64];
-    loop {
-        match stdin.read(&mut buffer).await {
-            Ok(0) | Err(_) => return,
-            Ok(_) => {}
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn accepts_only_loopback_and_tailscale_listeners() {
-        for address in [
-            "127.0.0.1",
-            "::1",
-            "100.64.0.1",
-            "100.127.255.254",
-            "fd7a:115c:a1e0::1",
-        ] {
-            assert!(validate_listen_address(address.parse().unwrap()).is_ok());
-        }
-        for address in ["0.0.0.0", "::", "100.128.0.1", "192.168.1.10", "8.8.8.8"] {
-            assert!(validate_listen_address(address.parse().unwrap()).is_err());
-        }
-    }
-
-    #[test]
-    fn parses_tailscale_listener() {
-        let options = parse_serve(
-            ["--listen", "100.100.100.100", "--port", "5902"]
-                .into_iter()
-                .map(str::to_owned),
-        )
-        .unwrap();
-        assert_eq!(options.listen, "100.100.100.100".parse::<IpAddr>().unwrap());
-        assert_eq!(options.port, 5902);
-    }
-
-    #[test]
-    fn defaults_to_standard_vnc_port_and_rejects_zero() {
-        let options = parse_serve(std::iter::empty()).unwrap();
-        assert_eq!(options.port, 5900);
-        assert!(parse_serve(["--port", "0"].into_iter().map(str::to_owned)).is_err());
+    fn validates_server_configuration() {
+        assert!(server_config("127.0.0.1", 5900, 0, 1920, 20).is_ok());
+        assert!(server_config("100.100.100.100", 5901, 1, 2560, 30).is_ok());
+        assert!(server_config("0.0.0.0", 5900, 0, 1920, 20).is_ok());
+        assert!(server_config("192.168.1.10", 5900, 0, 1920, 20).is_ok());
+        assert!(server_config("not-an-address", 5900, 0, 1920, 20).is_err());
+        assert!(server_config("127.0.0.1", 0, 0, 1920, 20).is_err());
+        assert!(server_config("127.0.0.1", 5900, 0, 1920, 0).is_err());
     }
 }

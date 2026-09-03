@@ -3,7 +3,6 @@ use objc2_application_services::{
 };
 use objc2_core_foundation::{CFBoolean, CFDictionary, CFString};
 use objc2_core_graphics::{CGPreflightScreenCaptureAccess, CGRequestScreenCaptureAccess};
-use std::process::Command;
 
 #[derive(Debug, Clone, Copy)]
 pub struct Permissions {
@@ -24,11 +23,13 @@ pub fn check() -> Permissions {
     }
 }
 
-pub fn request() -> Permissions {
+pub fn request_screen_recording() {
     if !CGPreflightScreenCaptureAccess() {
         CGRequestScreenCaptureAccess();
     }
+}
 
+pub fn request_accessibility() {
     if !unsafe { AXIsProcessTrusted() } {
         let key: &CFString = unsafe { kAXTrustedCheckOptionPrompt };
         let value = CFBoolean::new(true);
@@ -37,19 +38,4 @@ pub fn request() -> Permissions {
             AXIsProcessTrustedWithOptions(Some(options.as_opaque()));
         }
     }
-
-    check()
-}
-
-pub fn open_settings(permission: &str) {
-    let pane = match permission {
-        "screen" => "Privacy_ScreenCapture",
-        "accessibility" => "Privacy_Accessibility",
-        _ => return,
-    };
-    let _ = Command::new("open")
-        .arg(format!(
-            "x-apple.systempreferences:com.apple.preference.security?{pane}"
-        ))
-        .spawn();
 }

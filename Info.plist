@@ -3,24 +3,30 @@
 <plist version="1.0">
 <dict>
   <key>CFBundleDisplayName</key>
-  <string>macOS VNC Server</string>
+  <string>Vinny</string>
   <key>CFBundleExecutable</key>
-  <string>macos-vnc-server</string>
+  <string>vinny</string>
   <key>CFBundleIdentifier</key>
-  <string>dev.macos-vnc-server.app</string>
+  <string>run.lil.vinny</string>
+  <key>CFBundleIconFile</key>
+  <string>Vinny</string>
   <key>CFBundleInfoDictionaryVersion</key>
   <string>6.0</string>
   <key>CFBundleName</key>
-  <string>macOS VNC Server</string>
+  <string>Vinny</string>
   <key>CFBundlePackageType</key>
   <string>APPL</string>
   <key>CFBundleShortVersionString</key>
   <string>0.1.0</string>
   <key>CFBundleVersion</key>
   <string>1</string>
-  <key>LSBackgroundOnly</key>
+  <key>LSMultipleInstancesProhibited</key>
+  <true/>
+  <key>LSUIElement</key>
+  <true/>
+  <key>NSHighResolutionCapable</key>
   <true/>
   <key>NSScreenCaptureUsageDescription</key>
-  <string>macOS VNC Server uses screen capture to show this Mac through your private, authenticated connection.</string>
+  <string>Vinny uses screen capture to show this Mac through your private, authenticated connection.</string>
 </dict>
 </plist>

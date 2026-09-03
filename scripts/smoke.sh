@@ -2,11 +2,13 @@
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
-port="${PORT:-5909}"
-cargo build --quiet
-./target/debug/macos-vnc-server doctor
-./target/debug/macos-vnc-server serve --no-request --port "$port" --fps 5 --max-width 640 \
-  >"${TMPDIR:-/tmp}/macos-vnc-server-smoke.log" 2>&1 &
+port=5900
+app="${APP:-$(pwd)/dist/Vinny.app}"
+if [[ ! -x "$app/Contents/MacOS/vinny" ]]; then
+  echo "Build Vinny.app with ./scripts/package.sh first" >&2
+  exit 1
+fi
+"$app/Contents/MacOS/vinny" >"${TMPDIR:-/tmp}/vinny-smoke.log" 2>&1 &
 pid=$!
 cleanup() {
   kill "$pid" 2>/dev/null || true
@@ -48,7 +50,7 @@ pixel_format = exact(16)
 bytes_per_pixel = pixel_format[0] // 8
 name_length = struct.unpack(">I", exact(4))[0]
 name = exact(name_length).decode()
-assert name == "macOS Desktop"
+assert name == "Vinny Display 1"
 s.sendall(struct.pack(">BBH", 2, 0, 1) + struct.pack(">i", 0))
 time.sleep(.3)
 s.sendall(struct.pack(">BBHHHH", 3, 0, 0, 0, width, height))
