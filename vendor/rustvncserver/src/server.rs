@@ -35,11 +35,12 @@ use std::net::{Ipv4Addr, SocketAddr};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
+use tokio::io::AsyncWriteExt;
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::{mpsc, oneshot, RwLock, Semaphore};
 use tokio::time::{interval, timeout};
 
-use crate::client::{ClientEvent, VncClient};
+use crate::client::{ClientCommand, ClientEvent, ClientWriteStream, SecurityConfig, VncClient};
 use crate::framebuffer::{DirtyRegionReceiver, Framebuffer};
 use crate::repeater;
 
@@ -57,6 +58,20 @@ const HANDSHAKE_TIMEOUT: Duration = Duration::from_millis(100);
 const TASK_CLEANUP_INTERVAL: Duration = Duration::from_secs(30);
 #[cfg(test)]
 const TASK_CLEANUP_INTERVAL: Duration = Duration::from_millis(50);
+
+/// Controls how a server interprets the RFB `ClientInit` shared flag.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum SharingPolicy {
+    /// Honor each viewer's request for shared or exclusive access.
+    #[default]
+    FollowClient,
+    /// Keep existing viewers connected regardless of the flag.
+    AlwaysShared,
+    /// Permit only one connected viewer.
+    SingleClient,
+}
+
+type ClientCommands = Arc<RwLock<Vec<(usize, mpsc::Sender<ClientCommand>)>>>;
 
 struct AbortOnDrop(Option<tokio::task::JoinHandle<()>>);
 
@@ -88,16 +103,19 @@ pub struct VncServer {
     /// The VNC framebuffer, representing the remote desktop screen.
     framebuffer: Framebuffer,
     /// The name of the desktop, displayed to connected clients.
-    desktop_name: String,
-    /// Optional password for client authentication.
+    desktop_name: Arc<RwLock<String>>,
+    /// Optional password used by reverse/repeater compatibility paths.
     password: Option<String>,
+    /// Security configuration shared by all directly accepted clients.
+    security: SecurityConfig,
     /// A list of currently connected VNC clients, protected by a `RwLock` for concurrent access.
     clients: Arc<RwLock<Vec<Arc<RwLock<VncClient>>>>>,
     /// Write stream handles for direct socket shutdown
-    client_write_streams:
-        Arc<RwLock<Vec<Arc<tokio::sync::Mutex<tokio::net::tcp::OwnedWriteHalf>>>>>,
+    client_write_streams: Arc<RwLock<Vec<Arc<tokio::sync::Mutex<ClientWriteStream>>>>>,
     /// Task handles for waiting on client threads to exit
     client_tasks: Arc<RwLock<Vec<tokio::task::JoinHandle<()>>>>,
+    /// Non-blocking command channels for active direct clients.
+    client_commands: ClientCommands,
     /// List of active client IDs for fast lookup during shutdown without locking `VncClient` objects.
     ///
     /// This list is maintained separately from the `clients` list to allow the shutdown process
@@ -106,6 +124,8 @@ pub struct VncServer {
     client_ids: Arc<RwLock<Vec<usize>>>,
     /// Sender for server-wide events, used to notify external components of VNC server activity.
     event_tx: mpsc::UnboundedSender<ServerEvent>,
+    sharing_policy: SharingPolicy,
+    view_only: bool,
 }
 
 /// Enum representing various events that can occur within the VNC server.
@@ -128,6 +148,17 @@ pub enum ServerEvent {
         down: bool,
         /// The VNC keysym value of the key
         key: u32,
+    },
+    /// A layout-independent key event supplied by the QEMU extension.
+    ExtendedKeyPress {
+        /// The client that sent the event.
+        client_id: usize,
+        /// Whether the key is pressed.
+        down: bool,
+        /// The accompanying X11 keysym, if known.
+        keysym: u32,
+        /// The XT set-1 keycode.
+        keycode: u32,
     },
     /// A pointer (mouse) movement or button event was received from a client.
     PointerMove {
@@ -200,17 +231,46 @@ impl VncServer {
         desktop_name: String,
         password: Option<String>,
     ) -> (Self, mpsc::UnboundedReceiver<ServerEvent>) {
+        Self::new_with_policy(
+            width,
+            height,
+            desktop_name,
+            password,
+            SharingPolicy::FollowClient,
+            false,
+        )
+    }
+
+    /// Creates a server with explicit sharing and input policies.
+    ///
+    /// # Panics
+    /// Panics if a TLS identity cannot be generated for a password-protected server.
+    #[must_use]
+    pub fn new_with_policy(
+        width: u16,
+        height: u16,
+        desktop_name: String,
+        password: Option<String>,
+        sharing_policy: SharingPolicy,
+        view_only: bool,
+    ) -> (Self, mpsc::UnboundedReceiver<ServerEvent>) {
         let (event_tx, event_rx) = mpsc::unbounded_channel();
+        let security = SecurityConfig::from_password(password.clone())
+            .expect("generate VeNCrypt TLS certificate");
 
         let server = Self {
             framebuffer: Framebuffer::new(width, height),
-            desktop_name,
+            desktop_name: Arc::new(RwLock::new(desktop_name)),
             password,
+            security,
             clients: Arc::new(RwLock::new(Vec::new())),
             client_write_streams: Arc::new(RwLock::new(Vec::new())),
             client_tasks: Arc::new(RwLock::new(Vec::new())),
+            client_commands: Arc::new(RwLock::new(Vec::new())),
             client_ids: Arc::new(RwLock::new(Vec::new())),
             event_tx,
+            sharing_policy,
+            view_only,
         };
 
         (server, event_rx)
@@ -239,12 +299,20 @@ impl VncServer {
     }
 
     /// Starts the VNC server on an exact address. Callers can bind loopback-only.
+    ///
+    /// # Errors
+    /// Returns an I/O error if the listener cannot bind or accept a connection.
     #[allow(clippy::cast_possible_truncation)]
     pub async fn listen_on(&self, addr: SocketAddr) -> Result<(), std::io::Error> {
         let listener = TcpListener::bind(addr).await?;
         log::info!("VNC Server listening on {addr}");
 
-        let client_slots = Arc::new(Semaphore::new(MAX_CLIENTS));
+        let max_clients = if self.sharing_policy == SharingPolicy::SingleClient {
+            1
+        } else {
+            MAX_CLIENTS
+        };
+        let client_slots = Arc::new(Semaphore::new(max_clients));
         let mut task_cleanup = interval(TASK_CLEANUP_INTERVAL);
         task_cleanup.tick().await;
 
@@ -253,7 +321,7 @@ impl VncServer {
                 result = listener.accept() => match result {
                     Ok((stream, addr)) => {
                         let Ok(client_slot) = Arc::clone(&client_slots).try_acquire_owned() else {
-                            eprintln!("VNC connection rejected from {addr}: server already has {MAX_CLIENTS} clients");
+                            eprintln!("VNC connection rejected from {addr}: server already has {max_clients} clients");
                             continue;
                         };
                         eprintln!("VNC connection accepted from {addr}");
@@ -269,13 +337,16 @@ impl VncServer {
                         let client_id = client_id_raw as usize;
 
                         let framebuffer = self.framebuffer.clone();
-                        let desktop_name = self.desktop_name.clone();
-                        let password = self.password.clone();
+                        let desktop_name = self.desktop_name.read().await.clone();
+                        let security = self.security.clone();
                         let clients = self.clients.clone();
                         let client_write_streams = self.client_write_streams.clone();
                         let client_tasks = self.client_tasks.clone();
+                        let client_commands = self.client_commands.clone();
                         let client_ids = self.client_ids.clone();
                         let server_event_tx = self.event_tx.clone();
+                        let sharing_policy = self.sharing_policy;
+                        let accepts_input = !self.view_only;
 
                         let handle = tokio::spawn(async move {
                             let _client_slot = client_slot;
@@ -284,11 +355,14 @@ impl VncServer {
                                 client_id,
                                 framebuffer,
                                 desktop_name,
-                                password,
+                                security,
                                 clients,
                                 client_write_streams,
+                                client_commands,
                                 client_ids,
                                 server_event_tx,
+                                sharing_policy,
+                                accepts_input,
                             )
                             .await
                             {
@@ -321,7 +395,7 @@ impl VncServer {
     /// * `client_id` - Unique identifier assigned to this client
     /// * `framebuffer` - The framebuffer to send to the client
     /// * `desktop_name` - Name of the desktop session
-    /// * `password` - Optional password for authentication
+    /// * `security` - Transport and authentication configuration
     /// * `clients` - Shared list of all connected `VncClient` instances
     /// * `client_write_streams` - Shared list of write stream handles for socket shutdown
     /// * `client_ids` - Shared list of client IDs for fast lookup during shutdown
@@ -330,30 +404,31 @@ impl VncServer {
     /// # Returns
     ///
     /// `Ok(())` when the client disconnects normally, or `Err` if an I/O error occurs.
-    #[allow(clippy::too_many_arguments)] // VNC protocol handler requires all shared server state
+    #[allow(clippy::too_many_arguments, clippy::too_many_lines)]
     async fn handle_client(
         stream: TcpStream,
         client_id: usize,
         framebuffer: Framebuffer,
         desktop_name: String,
-        password: Option<String>,
+        security: SecurityConfig,
         clients: Arc<RwLock<Vec<Arc<RwLock<VncClient>>>>>,
-        client_write_streams: Arc<
-            RwLock<Vec<Arc<tokio::sync::Mutex<tokio::net::tcp::OwnedWriteHalf>>>>,
-        >,
+        client_write_streams: Arc<RwLock<Vec<Arc<tokio::sync::Mutex<ClientWriteStream>>>>>,
+        client_commands: ClientCommands,
         client_ids: Arc<RwLock<Vec<usize>>>,
         server_event_tx: mpsc::UnboundedSender<ServerEvent>,
+        sharing_policy: SharingPolicy,
+        accepts_input: bool,
     ) -> Result<(), std::io::Error> {
         let (client_event_tx, mut client_event_rx) = mpsc::unbounded_channel();
 
         let client = timeout(
             HANDSHAKE_TIMEOUT,
-            VncClient::new(
+            VncClient::new_with_security(
                 client_id,
                 stream,
                 framebuffer.clone(),
                 desktop_name,
-                password,
+                security,
                 client_event_tx,
             ),
         )
@@ -364,6 +439,13 @@ impl VncServer {
                 "VNC handshake did not complete within 10 seconds",
             )
         })??;
+
+        if sharing_policy == SharingPolicy::FollowClient && !client.is_shared() {
+            let existing = client_write_streams.read().await.clone();
+            for stream in existing {
+                let _ = stream.lock().await.shutdown().await;
+            }
+        }
 
         let client_arc = Arc::new(RwLock::new(client));
 
@@ -382,15 +464,18 @@ impl VncServer {
             .await
             .push(Arc::clone(&write_stream_handle));
 
+        let command_sender = client_arc.read().await.command_sender();
         clients.write().await.push(client_arc.clone());
+        client_commands
+            .write()
+            .await
+            .push((client_id, command_sender));
         client_ids.write().await.push(client_id);
 
         let _ = server_event_tx.send(ServerEvent::ClientConnected { client_id });
 
-        // Spawn task to handle client messages and store handle for joining
-        // Note: The message handler holds a write lock for its duration, which means
-        // operations like send_cut_text() will wait for the lock. This is acceptable
-        // since clipboard operations are infrequent and the async lock prevents deadlocks.
+        // Spawn the inbound message loop. Outbound server commands use the client's
+        // bounded command channel, so callers never wait on this long-held write lock.
         let client_arc_clone = client_arc.clone();
         let (message_done_tx, mut message_done_rx) = oneshot::channel();
         let msg_handle = AbortOnDrop::new(tokio::spawn(async move {
@@ -410,22 +495,38 @@ impl VncServer {
                 _ = &mut message_done_rx => break,
                 event = client_event_rx.recv() => match event {
                     Some(ClientEvent::KeyPress { down, key }) => {
-                        let _ = server_event_tx.send(ServerEvent::KeyPress {
-                            client_id,
-                            down,
-                            key,
-                        });
+                        if accepts_input {
+                            let _ = server_event_tx.send(ServerEvent::KeyPress {
+                                client_id,
+                                down,
+                                key,
+                            });
+                        }
+                    }
+                    Some(ClientEvent::ExtendedKeyPress { down, keysym, keycode }) => {
+                        if accepts_input {
+                            let _ = server_event_tx.send(ServerEvent::ExtendedKeyPress {
+                                client_id,
+                                down,
+                                keysym,
+                                keycode,
+                            });
+                        }
                     }
                     Some(ClientEvent::PointerMove { x, y, button_mask }) => {
-                        let _ = server_event_tx.send(ServerEvent::PointerMove {
-                            client_id,
-                            x,
-                            y,
-                            button_mask,
-                        });
+                        if accepts_input {
+                            let _ = server_event_tx.send(ServerEvent::PointerMove {
+                                client_id,
+                                x,
+                                y,
+                                button_mask,
+                            });
+                        }
                     }
                     Some(ClientEvent::CutText { text }) => {
-                        let _ = server_event_tx.send(ServerEvent::CutText { client_id, text });
+                        if accepts_input {
+                            let _ = server_event_tx.send(ServerEvent::CutText { client_id, text });
+                        }
                     }
                     Some(ClientEvent::Disconnected) | None => break,
                 }
@@ -447,6 +548,10 @@ impl VncServer {
             .write()
             .await
             .retain(|stream| !Arc::ptr_eq(stream, &write_stream_handle));
+        client_commands
+            .write()
+            .await
+            .retain(|(id, _)| *id != client_id);
 
         let _ = server_event_tx.send(ServerEvent::ClientDisconnected { client_id });
 
@@ -492,16 +597,69 @@ impl VncServer {
     ///
     /// Returns `Err(std::io::Error)` if an error occurs during the sending process to any client.
     pub async fn send_cut_text_to_all(&self, text: String) -> Result<(), std::io::Error> {
-        // Clone the client list before iterating to avoid holding read lock
-        // This prevents deadlock with client message handlers
-        let clients_snapshot = {
-            let clients = self.clients.read().await;
-            clients.clone()
-        };
+        let clients = self.client_commands.read().await.clone();
+        for (_, client) in clients {
+            client
+                .send(ClientCommand::CutText(text.clone()))
+                .await
+                .map_err(|_| {
+                    std::io::Error::new(
+                        std::io::ErrorKind::BrokenPipe,
+                        "VNC client command channel closed",
+                    )
+                })?;
+        }
+        Ok(())
+    }
 
-        for client in &clients_snapshot {
-            let mut client_guard = client.write().await;
-            let _ = client_guard.send_cut_text(text.clone()).await;
+    /// Notifies capable clients that the desktop name changed.
+    ///
+    /// # Errors
+    /// Returns an error if an active client's command channel has closed.
+    pub async fn set_desktop_name(&self, name: String) -> Result<(), std::io::Error> {
+        self.desktop_name.write().await.clone_from(&name);
+        let clients = self.client_commands.read().await.clone();
+        for (_, client) in clients {
+            client
+                .send(ClientCommand::DesktopName(name.clone()))
+                .await
+                .map_err(|_| {
+                    std::io::Error::new(
+                        std::io::ErrorKind::BrokenPipe,
+                        "VNC client command channel closed",
+                    )
+                })?;
+        }
+        Ok(())
+    }
+
+    /// Notifies capable clients of new framebuffer dimensions.
+    ///
+    /// # Errors
+    /// Returns an error if a client disconnects before receiving the update.
+    pub async fn notify_desktop_size(&self, width: u16, height: u16) -> Result<(), std::io::Error> {
+        let clients = self.client_commands.read().await.clone();
+        for (_, client) in clients {
+            let (sent, received) = oneshot::channel();
+            client
+                .send(ClientCommand::DesktopSize {
+                    width,
+                    height,
+                    sent,
+                })
+                .await
+                .map_err(|_| {
+                    std::io::Error::new(
+                        std::io::ErrorKind::BrokenPipe,
+                        "VNC client command channel closed",
+                    )
+                })?;
+            received.await.map_err(|_| {
+                std::io::Error::new(
+                    std::io::ErrorKind::BrokenPipe,
+                    "VNC client disconnected before the size update was sent",
+                )
+            })?;
         }
         Ok(())
     }
@@ -540,7 +698,7 @@ impl VncServer {
         info!("Initiating reverse VNC connection to {host}:{port}");
 
         let framebuffer = self.framebuffer.clone();
-        let desktop_name = self.desktop_name.clone();
+        let desktop_name = self.desktop_name.read().await.clone();
         let password = self.password.clone();
         let clients = self.clients.clone();
         let client_write_streams = self.client_write_streams.clone();
@@ -634,6 +792,19 @@ impl VncServer {
                                             down,
                                             key,
                                         });
+                                    }
+                                    ClientEvent::ExtendedKeyPress {
+                                        down,
+                                        keysym,
+                                        keycode,
+                                    } => {
+                                        let _ =
+                                            server_event_tx.send(ServerEvent::ExtendedKeyPress {
+                                                client_id,
+                                                down,
+                                                keysym,
+                                                keycode,
+                                            });
                                     }
                                     ClientEvent::PointerMove { x, y, button_mask } => {
                                         let _ = server_event_tx.send(ServerEvent::PointerMove {
@@ -731,7 +902,7 @@ impl VncServer {
         let client_id = client_id_raw as usize;
 
         let framebuffer = self.framebuffer.clone();
-        let desktop_name = self.desktop_name.clone();
+        let desktop_name = self.desktop_name.read().await.clone();
         let password = self.password.clone();
         let clients = self.clients.clone();
         let client_write_streams = self.client_write_streams.clone();
@@ -812,6 +983,18 @@ impl VncServer {
                                     client_id,
                                     down,
                                     key,
+                                });
+                            }
+                            ClientEvent::ExtendedKeyPress {
+                                down,
+                                keysym,
+                                keycode,
+                            } => {
+                                let _ = server_event_tx.send(ServerEvent::ExtendedKeyPress {
+                                    client_id,
+                                    down,
+                                    keysym,
+                                    keycode,
                                 });
                             }
                             ClientEvent::PointerMove { x, y, button_mask } => {
@@ -904,7 +1087,7 @@ impl VncServer {
         let client_id = client_id_raw as usize;
 
         let framebuffer = self.framebuffer.clone();
-        let desktop_name = self.desktop_name.clone();
+        let desktop_name = self.desktop_name.read().await.clone();
         let password = self.password.clone();
         let clients = self.clients.clone();
         let client_write_streams = self.client_write_streams.clone();
@@ -1020,6 +1203,18 @@ impl VncServer {
                                     client_id,
                                     down,
                                     key,
+                                });
+                            }
+                            ClientEvent::ExtendedKeyPress {
+                                down,
+                                keysym,
+                                keycode,
+                            } => {
+                                let _ = server_event_tx.send(ServerEvent::ExtendedKeyPress {
+                                    client_id,
+                                    down,
+                                    keysym,
+                                    keycode,
                                 });
                             }
                             ClientEvent::PointerMove { x, y, button_mask } => {

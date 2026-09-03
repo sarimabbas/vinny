@@ -14,4 +14,6 @@ Include the affected version, reproduction steps, impact, and any suggested miti
 
 ## Known security boundary
 
-Vinny currently provides neither VNC authentication nor transport encryption. It therefore listens on loopback by default. Binding it to another interface is a user-controlled risk decision: anyone who can reach that listener can view the screen and control keyboard and pointer input, while network observers can read the traffic. Use a trusted network or a secured tunnel such as Tailscale; direct public-internet exposure is unsupported.
+Vinny defaults to an unauthenticated, plaintext loopback listener for compatibility. Each server can instead enable password-authenticated VeNCrypt/X509Plain over TLS; the generated certificate is self-signed, so viewers may require explicit certificate approval. Passwords are stored in the macOS Keychain rather than `UserDefaults`.
+
+Binding an unsecured server to another interface remains a user-controlled risk decision: anyone who can reach it can view the screen and, unless view-only mode is enabled, control input. Use Vinny's encrypted mode, a trusted network, or a secured tunnel such as Tailscale. Direct public-internet exposure remains unsupported.

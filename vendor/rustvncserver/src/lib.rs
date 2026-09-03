@@ -28,6 +28,8 @@
 //! - **All pixel formats**: 8/16/24/32-bit color depths
 //! - **Tight encoding**: All 5 production modes (solid fill, mono rect, indexed
 //!   palette, full-color zlib, JPEG)
+//! - **RFB compatibility**: Versions 3.3, 3.7, and 3.8 plus common pseudo-encodings
+//! - **Secure transport**: Optional password-authenticated VeNCrypt/X.509 TLS
 //! - **Async I/O**: Built on Tokio for efficient concurrent client handling
 //! - **Memory safe**: Pure Rust with zero unsafe code in core logic
 //! - **Optional `TurboJPEG`**: Hardware-accelerated JPEG compression via feature flag
@@ -45,7 +47,7 @@
 //!         1920,
 //!         1080,
 //!         "My Desktop".to_string(),
-//!         Some("secret".to_string()), // Optional password
+//!         Some("secret".to_string()), // Optional VeNCrypt/TLS password
 //!     );
 //!
 //!     // Handle events from clients in a background task
@@ -118,7 +120,6 @@ pub mod protocol;
 pub mod server;
 
 // Internal modules
-mod auth;
 mod client;
 mod repeater;
 

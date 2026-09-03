@@ -49,10 +49,11 @@ A pure Rust VNC (Virtual Network Computing) server library with complete RFB pro
 ## Features
 
 ### Protocol Support
-- ✅ **RFB 3.8** - Full RFC 6143 compliance
+- ✅ **RFB 3.3, 3.7, and 3.8** - Version-correct negotiation
 - ✅ **11 Encodings** - All major VNC encodings supported
 - ✅ **All Pixel Formats** - 8/16/24/32-bit color depths
-- ✅ **Authentication** - VNC authentication protocol
+- ✅ **Secure transport** - VeNCrypt/X.509 TLS with password authentication
+- ✅ **Extensions** - Cursor, clipboard, resize, Fence, ContinuousUpdates, and QEMU key events
 - ✅ **Reverse Connections** - Connect to listening viewers
 - ✅ **Repeater Support** - UltraVNC Mode-2 repeaters
 
@@ -137,11 +138,13 @@ use rustvncserver::VncServer;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Create VNC server
-    let server = VncServer::new(1920, 1080);
-
-    // Optional: Set password
-    server.set_password(Some("secret".to_string()));
+    // A password enables VeNCrypt/X.509 TLS; use None for plaintext RFB.
+    let (server, _events) = VncServer::new(
+        1920,
+        1080,
+        "Desktop".to_string(),
+        Some("secret".to_string()),
+    );
 
     // Start listening
     server.listen(5900).await?;
@@ -159,8 +162,12 @@ use rustvncserver::VncServer;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let server = VncServer::new(800, 600);
-    server.set_password(Some("test".to_string()));
+    let (server, _events) = VncServer::new(
+        800,
+        600,
+        "Desktop".to_string(),
+        Some("test".to_string()),
+    );
 
     // Create test pattern
     let mut pixels = vec![0u8; 800 * 600 * 4]; // RGBA32
@@ -270,8 +277,8 @@ impl VncServer {
     /// Send clipboard text to all clients
     pub fn send_clipboard(&self, text: &str);
 
-    /// Set authentication password
-    pub fn set_password(&self, password: Option<String>);
+    /// Construct with optional VeNCrypt/TLS password authentication.
+    pub fn new(width: u16, height: u16, desktop_name: String, password: Option<String>);
 
     /// Get event receiver
     pub fn events(&self) -> mpsc::Receiver<ServerEvent>;
@@ -336,7 +343,7 @@ This pure Rust implementation provides several advantages over traditional C imp
 **Compatibility:**
 - ✅ Same protocols (RFC 6143)
 - ✅ Same encodings (byte-for-byte identical wire format)
-- ✅ Same features (authentication, reverse connections, repeater)
+- ✅ Same features (secure transport, reverse connections, repeater)
 - ✅ Works with all VNC viewers (TightVNC, RealVNC, TigerVNC, noVNC, etc.)
 
 ## Building

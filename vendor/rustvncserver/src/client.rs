@@ -34,46 +34,109 @@
 //! - **Rate Limiting**: Prevents overwhelming clients with excessive update frequency
 
 use bytes::{Buf, BufMut, BytesMut};
+use flate2::read::ZlibDecoder;
+use flate2::write::ZlibEncoder;
 use flate2::Compress;
 use flate2::Compression;
 use flate2::FlushCompress;
 use log::error;
 #[cfg(feature = "debug-logging")]
 use log::info;
+use std::io::{Read, Write};
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicU8, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio::net::TcpStream;
-use tokio::sync::mpsc;
-use tokio::sync::RwLock;
+use tokio::sync::{mpsc, oneshot, RwLock};
+use tokio_rustls::rustls;
+use tokio_rustls::TlsAcceptor;
 
-use crate::auth::VncAuth;
 use crate::encoding;
 use crate::encoding::tight::TightStreamCompressor;
 use crate::framebuffer::{DirtyRegion, Framebuffer};
 use crate::protocol::{
     PixelFormat, Rectangle, ServerInit, CLIENT_MSG_CLIENT_CUT_TEXT,
-    CLIENT_MSG_ENABLE_CONTINUOUS_UPDATES, CLIENT_MSG_FRAMEBUFFER_UPDATE_REQUEST,
-    CLIENT_MSG_KEY_EVENT, CLIENT_MSG_POINTER_EVENT, CLIENT_MSG_SET_ENCODINGS,
-    CLIENT_MSG_SET_PIXEL_FORMAT, ENCODING_COMPRESS_LEVEL_0, ENCODING_COMPRESS_LEVEL_9,
-    ENCODING_CONTINUOUS_UPDATES, ENCODING_COPYRECT, ENCODING_CORRE, ENCODING_HEXTILE,
-    ENCODING_QUALITY_LEVEL_0, ENCODING_QUALITY_LEVEL_9, ENCODING_RAW, ENCODING_RRE, ENCODING_TIGHT,
-    ENCODING_TIGHTPNG, ENCODING_ZLIB, ENCODING_ZLIBHEX, ENCODING_ZRLE, ENCODING_ZYWRLE,
-    PROTOCOL_VERSION, SECURITY_RESULT_FAILED, SECURITY_RESULT_OK, SECURITY_TYPE_NONE,
-    SECURITY_TYPE_VNC_AUTH, SERVER_MSG_END_OF_CONTINUOUS_UPDATES, SERVER_MSG_FRAMEBUFFER_UPDATE,
-    SERVER_MSG_SERVER_CUT_TEXT,
+    CLIENT_MSG_ENABLE_CONTINUOUS_UPDATES, CLIENT_MSG_FENCE, CLIENT_MSG_FRAMEBUFFER_UPDATE_REQUEST,
+    CLIENT_MSG_KEY_EVENT, CLIENT_MSG_POINTER_EVENT, CLIENT_MSG_QEMU, CLIENT_MSG_SET_DESKTOP_SIZE,
+    CLIENT_MSG_SET_ENCODINGS, CLIENT_MSG_SET_PIXEL_FORMAT, ENCODING_COMPRESS_LEVEL_0,
+    ENCODING_COMPRESS_LEVEL_9, ENCODING_CONTINUOUS_UPDATES, ENCODING_COPYRECT, ENCODING_CORRE,
+    ENCODING_CURSOR, ENCODING_DESKTOP_NAME, ENCODING_DESKTOP_SIZE, ENCODING_EXTENDED_CLIPBOARD,
+    ENCODING_EXTENDED_DESKTOP_SIZE, ENCODING_FENCE, ENCODING_HEXTILE, ENCODING_LAST_RECT,
+    ENCODING_QEMU_EXTENDED_KEY_EVENT, ENCODING_QUALITY_LEVEL_0, ENCODING_QUALITY_LEVEL_9,
+    ENCODING_RAW, ENCODING_RRE, ENCODING_TIGHT, ENCODING_TIGHTPNG, ENCODING_ZLIB, ENCODING_ZLIBHEX,
+    ENCODING_ZRLE, ENCODING_ZYWRLE, PROTOCOL_VERSION, PROTOCOL_VERSION_3_3, PROTOCOL_VERSION_3_7,
+    PROTOCOL_VERSION_3_8, SECURITY_RESULT_FAILED, SECURITY_RESULT_OK, SECURITY_TYPE_NONE,
+    SECURITY_TYPE_VENCRYPT, SERVER_MSG_END_OF_CONTINUOUS_UPDATES, SERVER_MSG_FENCE,
+    SERVER_MSG_FRAMEBUFFER_UPDATE, SERVER_MSG_SERVER_CUT_TEXT,
 };
 use rfb_encodings::translate;
 
 /// Represents various events that a VNC client can send to the server.
 /// These events typically correspond to user interactions like keyboard input,
 /// pointer movements, or clipboard updates.
+/// An asynchronous bidirectional transport used after RFB security negotiation.
+pub trait RfbStream: AsyncRead + AsyncWrite + Unpin + Send + Sync {}
+impl<T: AsyncRead + AsyncWrite + Unpin + Send + Sync> RfbStream for T {}
+
+/// The independently lockable write half of an RFB transport.
+pub type ClientWriteStream = tokio::io::WriteHalf<Box<dyn RfbStream>>;
+
+type ClientReadStream = tokio::io::ReadHalf<Box<dyn RfbStream>>;
+
+#[derive(Clone)]
+pub(crate) enum SecurityConfig {
+    None,
+    VeNCrypt {
+        tls: Arc<rustls::ServerConfig>,
+        password: Arc<str>,
+    },
+}
+
+impl SecurityConfig {
+    pub(crate) fn from_password(password: Option<String>) -> Result<Self, std::io::Error> {
+        let Some(password) = password else {
+            return Ok(Self::None);
+        };
+        let certificate = rcgen::generate_simple_self_signed(vec!["vinny.local".into()])
+            .map_err(std::io::Error::other)?;
+        let key =
+            rustls::pki_types::PrivatePkcs8KeyDer::from(certificate.signing_key.serialize_der());
+        let tls = rustls::ServerConfig::builder()
+            .with_no_client_auth()
+            .with_single_cert(
+                vec![certificate.cert.der().clone()],
+                rustls::pki_types::PrivateKeyDer::Pkcs8(key),
+            )
+            .map_err(std::io::Error::other)?;
+        Ok(Self::VeNCrypt {
+            tls: Arc::new(tls),
+            password: password.into(),
+        })
+    }
+}
+
+pub(crate) enum ClientCommand {
+    CutText(String),
+    DesktopName(String),
+    DesktopSize {
+        width: u16,
+        height: u16,
+        sent: oneshot::Sender<()>,
+    },
+}
+
 pub enum ClientEvent {
     /// A key press or release event.
     /// - `down`: `true` if the key is pressed, `false` if released.
     /// - `key`: The X Window System keysym of the key.
     KeyPress { down: bool, key: u32 },
+    /// A layout-independent XT keycode supplied through the QEMU key event extension.
+    ExtendedKeyPress {
+        down: bool,
+        keysym: u32,
+        keycode: u32,
+    },
     /// A pointer (mouse) movement or button event.
     /// - `x`: The X-coordinate of the pointer.
     /// - `y`: The Y-coordinate of the pointer.
@@ -212,6 +275,17 @@ impl TightStreamCompressor for TightZlibStreams {
 /// It is responsible for sending framebuffer updates to the client based on dirty regions,
 /// processing incoming client messages (e.g., key events, pointer events, pixel format requests),
 /// and managing client-specific settings like preferred encodings and JPEG quality.
+fn constant_time_eq(expected: &[u8], supplied: &[u8]) -> bool {
+    if expected.len() != supplied.len() {
+        return false;
+    }
+    expected
+        .iter()
+        .zip(supplied)
+        .fold(0u8, |difference, (left, right)| difference | (left ^ right))
+        == 0
+}
+
 fn default_wire_pixel_format() -> PixelFormat {
     // Conventional RFB 32-bit true-colour format: pixel value 0x00RRGGBB,
     // transmitted as B, G, R, padding on little-endian clients.
@@ -229,13 +303,35 @@ fn default_wire_pixel_format() -> PixelFormat {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ProtocolVersion {
+    V3_3,
+    V3_7,
+    V3_8,
+}
+
+impl ProtocolVersion {
+    fn parse(bytes: &[u8; 12]) -> Result<Self, std::io::Error> {
+        match bytes {
+            PROTOCOL_VERSION_3_3 | b"RFB 003.005\n" => Ok(Self::V3_3),
+            PROTOCOL_VERSION_3_7 => Ok(Self::V3_7),
+            PROTOCOL_VERSION_3_8 => Ok(Self::V3_8),
+            _ => Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "unsupported RFB protocol version",
+            )),
+        }
+    }
+}
+
 pub struct VncClient {
     /// The read half of the TCP stream for receiving client messages.
-    read_stream: tokio::net::tcp::OwnedReadHalf,
-    /// The write half of the TCP stream for sending updates to the client.
-    write_stream: Arc<tokio::sync::Mutex<tokio::net::tcp::OwnedWriteHalf>>,
+    read_stream: ClientReadStream,
+    /// The write half of the transport for sending updates to the client.
+    write_stream: Arc<tokio::sync::Mutex<ClientWriteStream>>,
     /// A reference to the framebuffer, used to retrieve pixel data for updates.
     framebuffer: Framebuffer,
+    shared: bool,
     /// The pixel format requested by the client, protected by a `RwLock` for concurrent access.
     /// It is written by the message handler and read by the encoder.
     pixel_format: RwLock<PixelFormat>, // Protected - written by message handler, read by encoder
@@ -257,6 +353,14 @@ pub struct VncClient {
     /// Whether the client supports the `ContinuousUpdates` extension (advertised via -313 pseudo-encoding).
     /// When true, server has sent `EndOfContinuousUpdates` and client can send `EnableContinuousUpdates`.
     supports_continuous_updates: AtomicBool, // Atomic - set when client advertises -313
+    supports_cursor: AtomicBool,
+    supports_fence: AtomicBool,
+    supports_last_rect: AtomicBool,
+    supports_desktop_size: AtomicBool,
+    supports_extended_desktop_size: AtomicBool,
+    supports_desktop_name: AtomicBool,
+    supports_extended_key_event: AtomicBool,
+    supports_extended_clipboard: AtomicBool,
     /// Whether continuous updates are currently enabled via the `ContinuousUpdates` extension.
     /// When true, server pushes updates without waiting for `FramebufferUpdateRequest`.
     continuous_updates_enabled: AtomicBool, // Atomic - set by EnableContinuousUpdates message
@@ -313,6 +417,9 @@ pub struct VncClient {
     request_id: Option<String>,
     /// Unique client ID assigned by the server
     client_id: usize,
+    command_tx: mpsc::Sender<ClientCommand>,
+    command_rx: Option<mpsc::Receiver<ClientCommand>>,
+    pending_clipboard: Option<String>,
 }
 
 impl VncClient {
@@ -338,102 +445,181 @@ impl VncClient {
     /// `Err(std::io::Error)` if an I/O error occurs during communication or handshake.
     pub async fn new(
         client_id: usize,
-        mut stream: TcpStream,
+        stream: TcpStream,
         framebuffer: Framebuffer,
         desktop_name: String,
         password: Option<String>,
         event_tx: mpsc::UnboundedSender<ClientEvent>,
     ) -> Result<Self, std::io::Error> {
-        // Capture remote host address before handshake
+        let security = SecurityConfig::from_password(password)?;
+        Self::new_with_security(
+            client_id,
+            stream,
+            framebuffer,
+            desktop_name,
+            security,
+            event_tx,
+        )
+        .await
+    }
+
+    #[allow(clippy::too_many_lines)]
+    pub(crate) async fn new_with_security(
+        client_id: usize,
+        mut stream: TcpStream,
+        framebuffer: Framebuffer,
+        desktop_name: String,
+        security: SecurityConfig,
+        event_tx: mpsc::UnboundedSender<ClientEvent>,
+    ) -> Result<Self, std::io::Error> {
+        const X509_PLAIN: u32 = 262;
+        const MAX_CREDENTIAL_LENGTH: usize = 1024;
+
         let remote_host = stream
             .peer_addr()
             .map_or_else(|_| "unknown".to_string(), |addr| addr.to_string());
-
-        // This is only a latency optimization. Network-extension sockets, including
-        // Tailscale on macOS, may reject TCP_NODELAY even though reads and writes work.
         let _ = stream.set_nodelay(true);
-
-        // Send protocol version
         stream.write_all(PROTOCOL_VERSION.as_bytes()).await?;
 
-        // Read client protocol version
-        let mut version_buf = vec![0u8; 12];
+        let mut version_buf = [0u8; 12];
         stream.read_exact(&mut version_buf).await?;
+        let protocol_version = ProtocolVersion::parse(&version_buf)?;
         #[cfg(feature = "debug-logging")]
         info!("Client version: {}", String::from_utf8_lossy(&version_buf));
 
-        // Offer exactly one security type and reject any other selection.
-        let offered_security_type = if password.is_some() {
-            SECURITY_TYPE_VNC_AUTH
-        } else {
-            SECURITY_TYPE_NONE
+        let offered_security_type = match security {
+            SecurityConfig::None => SECURITY_TYPE_NONE,
+            SecurityConfig::VeNCrypt { .. } => SECURITY_TYPE_VENCRYPT,
         };
-        stream.write_all(&[1, offered_security_type]).await?;
-
-        let mut sec_type = [0u8; 1];
-        stream.read_exact(&mut sec_type).await?;
-        if sec_type[0] != offered_security_type {
+        if protocol_version == ProtocolVersion::V3_3
+            && offered_security_type == SECURITY_TYPE_VENCRYPT
+        {
+            stream.write_all(&0u32.to_be_bytes()).await?;
+            let reason = b"Encrypted servers require RFB 3.7 or newer";
+            let reason_length = u32::try_from(reason.len()).map_err(std::io::Error::other)?;
+            stream.write_all(&reason_length.to_be_bytes()).await?;
+            stream.write_all(reason).await?;
             return Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                "client selected a security type that was not offered",
+                std::io::ErrorKind::Unsupported,
+                "VeNCrypt requires RFB 3.7 or newer",
             ));
         }
 
-        // Handle authentication
-        if sec_type[0] == SECURITY_TYPE_VNC_AUTH {
-            let auth = VncAuth::new(password.clone());
-            let challenge = auth.generate_challenge();
-            stream.write_all(&challenge).await?;
-
-            let mut response = vec![0u8; 16];
-            stream.read_exact(&mut response).await?;
-
-            if auth.verify_response(&response, &challenge) {
-                let mut buf = BytesMut::with_capacity(4);
-                buf.put_u32(SECURITY_RESULT_OK);
-                stream.write_all(&buf).await?;
-            } else {
-                let mut buf = BytesMut::with_capacity(4);
-                buf.put_u32(SECURITY_RESULT_FAILED);
-                stream.write_all(&buf).await?;
+        if protocol_version == ProtocolVersion::V3_3 {
+            stream
+                .write_all(&u32::from(offered_security_type).to_be_bytes())
+                .await?;
+        } else {
+            stream.write_all(&[1, offered_security_type]).await?;
+            let mut selected = [0u8; 1];
+            stream.read_exact(&mut selected).await?;
+            if selected[0] != offered_security_type {
                 return Err(std::io::Error::new(
-                    std::io::ErrorKind::PermissionDenied,
-                    "VNC authentication failed",
+                    std::io::ErrorKind::InvalidData,
+                    "client selected a security type that was not offered",
                 ));
             }
-        } else if sec_type[0] == SECURITY_TYPE_NONE {
-            let mut buf = BytesMut::with_capacity(4);
-            buf.put_u32(SECURITY_RESULT_OK);
-            stream.write_all(&buf).await?;
         }
 
-        // Read ClientInit
+        let mut stream: Box<dyn RfbStream> = match security {
+            SecurityConfig::None => {
+                if protocol_version == ProtocolVersion::V3_8 {
+                    stream.write_all(&SECURITY_RESULT_OK.to_be_bytes()).await?;
+                }
+                Box::new(stream)
+            }
+            SecurityConfig::VeNCrypt { tls, password } => {
+                stream.write_all(&[0, 2]).await?;
+                let mut version = [0u8; 2];
+                stream.read_exact(&mut version).await?;
+                if version != [0, 2] {
+                    stream.write_all(&[1]).await?;
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        "unsupported VeNCrypt version",
+                    ));
+                }
+                stream.write_all(&[0, 1]).await?;
+                stream.write_all(&X509_PLAIN.to_be_bytes()).await?;
+                let mut subtype = [0u8; 4];
+                stream.read_exact(&mut subtype).await?;
+                if u32::from_be_bytes(subtype) != X509_PLAIN {
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        "client selected an unoffered VeNCrypt subtype",
+                    ));
+                }
+                stream.write_all(&[1]).await?;
+                let mut tls_stream = TlsAcceptor::from(tls).accept(stream).await?;
+                let mut lengths = [0u8; 8];
+                tls_stream.read_exact(&mut lengths).await?;
+                let username_length = u32::from_be_bytes(lengths[..4].try_into().unwrap()) as usize;
+                let password_length = u32::from_be_bytes(lengths[4..].try_into().unwrap()) as usize;
+                if username_length > MAX_CREDENTIAL_LENGTH
+                    || password_length > MAX_CREDENTIAL_LENGTH
+                {
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        "VeNCrypt credentials are too large",
+                    ));
+                }
+                let mut username = vec![0u8; username_length];
+                let mut supplied_password = vec![0u8; password_length];
+                tls_stream.read_exact(&mut username).await?;
+                tls_stream.read_exact(&mut supplied_password).await?;
+                let authenticated = constant_time_eq(password.as_bytes(), &supplied_password);
+                tls_stream
+                    .write_all(
+                        &(if authenticated {
+                            SECURITY_RESULT_OK
+                        } else {
+                            SECURITY_RESULT_FAILED
+                        })
+                        .to_be_bytes(),
+                    )
+                    .await?;
+                if !authenticated {
+                    if protocol_version == ProtocolVersion::V3_8 {
+                        let reason = b"Authentication failed";
+                        let reason_length =
+                            u32::try_from(reason.len()).map_err(std::io::Error::other)?;
+                        tls_stream.write_all(&reason_length.to_be_bytes()).await?;
+                        tls_stream.write_all(reason).await?;
+                    }
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::PermissionDenied,
+                        "VeNCrypt authentication failed",
+                    ));
+                }
+                Box::new(tls_stream)
+            }
+        };
+
         let mut shared = [0u8; 1];
         stream.read_exact(&mut shared).await?;
+        let shared = shared[0] != 0;
 
-        // Send ServerInit
         let server_init = ServerInit {
             framebuffer_width: framebuffer.width(),
             framebuffer_height: framebuffer.height(),
             pixel_format: default_wire_pixel_format(),
             name: desktop_name,
         };
-
         let mut init_buf = BytesMut::new();
         server_init.write_to(&mut init_buf);
         stream.write_all(&init_buf).await?;
-
         log::info!("VNC client handshake completed");
 
-        // Split stream into read/write halves for lock-free shutdown
-        let (read_stream, write_stream) = stream.into_split();
+        let (read_stream, write_stream) = tokio::io::split(stream);
 
         let creation_time = Instant::now();
+        let (command_tx, command_rx) = mpsc::channel(32);
 
         Ok(Self {
             read_stream,
             write_stream: Arc::new(tokio::sync::Mutex::new(write_stream)),
             framebuffer,
+            shared,
             pixel_format: RwLock::new(default_wire_pixel_format()),
             encodings: RwLock::new(vec![ENCODING_RAW]),
             event_tx,
@@ -442,8 +628,16 @@ impl VncClient {
             compression_level: AtomicU8::new(6), // Default zlib compression (balanced)
             quality_level: AtomicU8::new(255),   // 255 = unset (use JPEG by default)
             supports_continuous_updates: AtomicBool::new(false), // Set when client advertises -313
+            supports_cursor: AtomicBool::new(false),
+            supports_fence: AtomicBool::new(false),
+            supports_last_rect: AtomicBool::new(false),
+            supports_desktop_size: AtomicBool::new(false),
+            supports_extended_desktop_size: AtomicBool::new(false),
+            supports_desktop_name: AtomicBool::new(false),
+            supports_extended_key_event: AtomicBool::new(false),
+            supports_extended_clipboard: AtomicBool::new(false),
             continuous_updates_enabled: AtomicBool::new(false), // Set by EnableContinuousUpdates
-            continuous_updates_region: RwLock::new(None), // Region for continuous updates
+            continuous_updates_region: RwLock::new(None),       // Region for continuous updates
             update_requested: AtomicBool::new(false), // Legacy: set by FramebufferUpdateRequest
             modified_regions: Arc::new(RwLock::new(Vec::new())),
             requested_region: RwLock::new(None),
@@ -464,6 +658,9 @@ impl VncClient {
             repeater_id: None,      // None for direct inbound connections
             request_id: None,       // None for direct inbound connections
             client_id,
+            command_tx,
+            command_rx: Some(command_rx),
+            pending_clipboard: None,
         })
     }
 
@@ -545,10 +742,30 @@ impl VncClient {
         const MAX_CUT_TEXT: usize = 10 * 1024 * 1024; // 10MB limit
 
         let mut buf = BytesMut::with_capacity(4096);
-        let mut check_interval = tokio::time::interval(tokio::time::Duration::from_millis(16)); // Check for updates ~60 times/sec
+        let mut check_interval = tokio::time::interval(tokio::time::Duration::from_millis(16));
+        let mut command_rx = self
+            .command_rx
+            .take()
+            .ok_or_else(|| std::io::Error::other("client message loop has already been started"))?;
 
         loop {
             tokio::select! {
+                command = command_rx.recv() => match command {
+                    Some(ClientCommand::CutText(text)) => {
+                        if self.supports_extended_clipboard.load(Ordering::Relaxed) {
+                            self.pending_clipboard = Some(text);
+                            self.send_extended_clipboard_action((1 << 27) | 1, &[]).await?;
+                        } else {
+                            self.send_cut_text(text).await?;
+                        }
+                    }
+                    Some(ClientCommand::DesktopName(name)) => self.send_desktop_name(&name).await?,
+                    Some(ClientCommand::DesktopSize { width, height, sent }) => {
+                        self.send_desktop_size(width, height).await?;
+                        let _ = sent.send(());
+                    }
+                    None => {}
+                },
                 // Handle incoming client messages
                 result = self.read_stream.read_buf(&mut buf) => {
                     if result? == 0 {
@@ -590,6 +807,9 @@ impl VncClient {
 
                                 // Accept the format and store it for translation during encoding
                                 *self.pixel_format.write().await = requested_format.clone();
+                                if self.supports_cursor.load(Ordering::Relaxed) {
+                                    self.send_default_cursor().await?;
+                                }
 
                                 #[cfg(feature = "debug-logging")]
                                 {
@@ -606,15 +826,14 @@ impl VncClient {
                                 }
                             }
                             CLIENT_MSG_SET_ENCODINGS => {
-                                if buf.len() < 4 { // 1 + 1 padding + 2 count
+                                if buf.len() < 4 {
                                     break;
                                 }
-                                buf.advance(1); // message type
-                                buf.advance(1); // padding
-                                let count = buf.get_u16() as usize;
-                                if buf.len() < count * 4 {
-                                    break; // Need more data
+                                let count = u16::from_be_bytes([buf[2], buf[3]]) as usize;
+                                if buf.len() < 4 + count * 4 {
+                                    break;
                                 }
+                                buf.advance(4);
                                 let mut encodings_list = Vec::with_capacity(count);
                                 for _ in 0..count {
                                     let encoding = buf.get_i32();
@@ -639,6 +858,38 @@ impl VncClient {
                                         self.compression_level.store(compression_level, Ordering::Relaxed);
                                         #[cfg(feature = "debug-logging")]
                                         info!("Client requested compression level {compression_level}, using zlib level {compression_level}");
+                                    }
+
+                                    if encoding == ENCODING_CURSOR
+                                        && !self.supports_cursor.swap(true, Ordering::Relaxed)
+                                    {
+                                        self.send_default_cursor().await?;
+                                    }
+                                    if encoding == ENCODING_LAST_RECT {
+                                        self.supports_last_rect.store(true, Ordering::Relaxed);
+                                    }
+                                    if encoding == ENCODING_DESKTOP_SIZE {
+                                        self.supports_desktop_size.store(true, Ordering::Relaxed);
+                                    }
+                                    if encoding == ENCODING_EXTENDED_DESKTOP_SIZE {
+                                        self.supports_extended_desktop_size.store(true, Ordering::Relaxed);
+                                    }
+                                    if encoding == ENCODING_DESKTOP_NAME {
+                                        self.supports_desktop_name.store(true, Ordering::Relaxed);
+                                    }
+                                    if encoding == ENCODING_QEMU_EXTENDED_KEY_EVENT
+                                        && !self.supports_extended_key_event.swap(true, Ordering::Relaxed)
+                                    {
+                                        self.send_pseudo_rect(ENCODING_QEMU_EXTENDED_KEY_EVENT, 0, 0, 0, 0, &[]).await?;
+                                    }
+                                    if encoding == ENCODING_FENCE
+                                        && !self.supports_fence.swap(true, Ordering::Relaxed)
+                                    {
+                                        self.send_fence(0, &[]).await?;
+                                    }
+                                    if encoding == ENCODING_EXTENDED_CLIPBOARD {
+                                        self.supports_extended_clipboard.store(true, Ordering::Relaxed);
+                                        self.send_extended_clipboard_caps().await?;
                                     }
 
                                     // Check for ContinuousUpdates pseudo-encoding (-313)
@@ -675,6 +926,10 @@ impl VncClient {
 
                                 #[cfg(feature = "debug-logging")]
                                 info!("FramebufferUpdateRequest: incremental={incremental}, region=({x},{y} {width}x{height})");
+
+                                if self.continuous_updates_enabled.load(Ordering::Relaxed) && incremental {
+                                    continue;
+                                }
 
                                 // Track requested region (standard VNC protocol cl->requestedRegion)
                                 *self.requested_region.write().await = Some(DirtyRegion::new(x, y, width, height));
@@ -735,31 +990,120 @@ impl VncClient {
                                 });
                             }
                             CLIENT_MSG_CLIENT_CUT_TEXT => {
-                                if buf.len() < 8 { // 1 + 3 padding + 4 length
+                                if buf.len() < 8 {
                                     break;
                                 }
-                                buf.advance(1); // message type
-                                buf.advance(3); // padding
-                                let length = buf.get_u32() as usize;
-
+                                let signed_length = i32::from_be_bytes(buf[4..8].try_into().unwrap());
+                                let length = if signed_length < 0 {
+                                    signed_length.checked_abs().map(|value| value as usize)
+                                } else {
+                                    Some(signed_length as usize)
+                                }
+                                .ok_or_else(|| std::io::Error::new(
+                                    std::io::ErrorKind::InvalidData,
+                                    "invalid cut text length",
+                                ))?;
                                 if length > MAX_CUT_TEXT {
-                                    error!("Cut text too large: {length} bytes (max {MAX_CUT_TEXT}), disconnecting client");
-                                    let _ = self.event_tx.send(ClientEvent::Disconnected);
                                     return Err(std::io::Error::new(
                                         std::io::ErrorKind::InvalidData,
-                                        "Cut text too large"
+                                        "Cut text too large",
                                     ));
                                 }
-
-                                if buf.len() < length {
-                                    break; // Need more data
+                                if buf.len() < 8 + length {
+                                    break;
                                 }
-                                let text_bytes = buf.split_to(length);
-                                if let Ok(text) = String::from_utf8(text_bytes.to_vec()) {
+                                buf.advance(8);
+                                let payload = buf.split_to(length);
+                                if signed_length >= 0 {
+                                    let text: String = payload.iter().copied().map(char::from).collect();
                                     let _ = self.event_tx.send(ClientEvent::CutText { text });
+                                } else if self.supports_extended_clipboard.load(Ordering::Relaxed) {
+                                    self.handle_extended_clipboard(&payload).await?;
+                                }
+                            }
+                            CLIENT_MSG_FENCE => {
+                                if !self.supports_fence.load(Ordering::Relaxed) {
+                                    return Err(std::io::Error::new(
+                                        std::io::ErrorKind::InvalidData,
+                                        "Fence used before capability negotiation",
+                                    ));
+                                }
+                                if buf.len() < 9 {
+                                    break;
+                                }
+                                let length = buf[8] as usize;
+                                if length > 64 {
+                                    return Err(std::io::Error::new(
+                                        std::io::ErrorKind::InvalidData,
+                                        "Fence payload exceeds 64 bytes",
+                                    ));
+                                }
+                                if buf.len() < 9 + length {
+                                    break;
+                                }
+                                buf.advance(4);
+                                let flags = buf.get_u32();
+                                let length = buf.get_u8() as usize;
+                                let payload = buf.split_to(length);
+                                if flags & 0x8000_0000 != 0 {
+                                    self.send_fence(flags & 0x7, &payload).await?;
+                                }
+                            }
+                            CLIENT_MSG_SET_DESKTOP_SIZE => {
+                                if buf.len() < 8 {
+                                    break;
+                                }
+                                let screens = buf[6] as usize;
+                                let message_len = 8usize.saturating_add(screens.saturating_mul(16));
+                                if buf.len() < message_len {
+                                    break;
+                                }
+                                buf.advance(message_len);
+                                if self.supports_extended_desktop_size.load(Ordering::Relaxed) {
+                                    self.send_extended_desktop_size(
+                                        1,
+                                        1,
+                                        self.framebuffer.width(),
+                                        self.framebuffer.height(),
+                                    ).await?;
+                                }
+                            }
+                            CLIENT_MSG_QEMU => {
+                                if buf.len() < 2 {
+                                    break;
+                                }
+                                match buf[1] {
+                                    0 => {
+                                        if buf.len() < 12 {
+                                            break;
+                                        }
+                                        buf.advance(2);
+                                        let down = buf.get_u16() != 0;
+                                        let keysym = buf.get_u32();
+                                        let keycode = buf.get_u32();
+                                        if self.supports_extended_key_event.load(Ordering::Relaxed) {
+                                            let _ = self.event_tx.send(ClientEvent::ExtendedKeyPress {
+                                                down,
+                                                keysym,
+                                                keycode,
+                                            });
+                                        }
+                                    }
+                                    _ => {
+                                        return Err(std::io::Error::new(
+                                            std::io::ErrorKind::InvalidData,
+                                            "unsupported QEMU submessage",
+                                        ));
+                                    }
                                 }
                             }
                             CLIENT_MSG_ENABLE_CONTINUOUS_UPDATES => {
+                                if !self.supports_continuous_updates.load(Ordering::Relaxed) {
+                                    return Err(std::io::Error::new(
+                                        std::io::ErrorKind::InvalidData,
+                                        "ContinuousUpdates used before capability negotiation",
+                                    ));
+                                }
                                 // EnableContinuousUpdates: enable(u8) + x(u16) + y(u16) + w(u16) + h(u16) = 10 bytes total
                                 if buf.len() < 10 {
                                     break;
@@ -843,9 +1187,10 @@ impl VncClient {
                         if should_send {
                             self.send_batched_update().await?;
 
-                            // In traditional mode (not ContinuousUpdates), clear the update_requested flag
-                            // This matches libvncserver behavior: after sending an update, wait for next request
-                            if !cu_enabled {
+                            if cu_enabled {
+                                *self.requested_region.write().await =
+                                    *self.continuous_updates_region.read().await;
+                            } else {
                                 self.update_requested.store(false, Ordering::Relaxed);
                             }
                         }
@@ -853,6 +1198,240 @@ impl VncClient {
                 }
             }
         }
+    }
+
+    async fn send_pseudo_rect(
+        &self,
+        encoding: i32,
+        x: u16,
+        y: u16,
+        width: u16,
+        height: u16,
+        data: &[u8],
+    ) -> Result<(), std::io::Error> {
+        let mut response = BytesMut::with_capacity(16 + data.len());
+        response.put_u8(SERVER_MSG_FRAMEBUFFER_UPDATE);
+        response.put_u8(0);
+        response.put_u16(1);
+        Rectangle {
+            x,
+            y,
+            width,
+            height,
+            encoding,
+        }
+        .write_header(&mut response);
+        response.put_slice(data);
+        let _guard = self.send_mutex.lock().await;
+        self.write_stream.lock().await.write_all(&response).await
+    }
+
+    async fn send_fence(&self, flags: u32, payload: &[u8]) -> Result<(), std::io::Error> {
+        let mut response = BytesMut::with_capacity(9 + payload.len());
+        response.put_u8(SERVER_MSG_FENCE);
+        response.put_bytes(0, 3);
+        response.put_u32(flags);
+        response.put_u8(u8::try_from(payload.len()).map_err(|_| {
+            std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "Fence payload exceeds 255 bytes",
+            )
+        })?);
+        response.put_slice(payload);
+        let _guard = self.send_mutex.lock().await;
+        self.write_stream.lock().await.write_all(&response).await
+    }
+
+    async fn send_extended_desktop_size(
+        &self,
+        reason: u16,
+        status: u16,
+        width: u16,
+        height: u16,
+    ) -> Result<(), std::io::Error> {
+        let mut data = BytesMut::with_capacity(20);
+        data.put_u8(1);
+        data.put_bytes(0, 3);
+        data.put_u32(0);
+        data.put_u16(0);
+        data.put_u16(0);
+        data.put_u16(width);
+        data.put_u16(height);
+        data.put_u32(0);
+        self.send_pseudo_rect(
+            ENCODING_EXTENDED_DESKTOP_SIZE,
+            reason,
+            status,
+            width,
+            height,
+            &data,
+        )
+        .await
+    }
+
+    async fn send_default_cursor(&self) -> Result<(), std::io::Error> {
+        const WIDTH: u16 = 16;
+        const HEIGHT: u16 = 16;
+        let width = usize::from(WIDTH);
+        let height = usize::from(HEIGHT);
+        let mut rgba = vec![0u8; width * height * 4];
+        let mut mask = vec![0u8; width.div_ceil(8) * height];
+        for y in 0..height {
+            for x in 0..width {
+                let visible =
+                    (y <= 11 && x <= y / 2) || ((8..=14).contains(&y) && (4..=6).contains(&x));
+                if visible {
+                    let offset = (y * width + x) * 4;
+                    rgba[offset..offset + 4].copy_from_slice(&[255, 255, 255, 255]);
+                    mask[y * width.div_ceil(8) + x / 8] |= 0x80 >> (x % 8);
+                }
+            }
+        }
+        let format = self.pixel_format.read().await;
+        let mut data = translate::translate_pixels(&rgba, &PixelFormat::rgba32(), &format);
+        data.extend_from_slice(&mask);
+        self.send_pseudo_rect(ENCODING_CURSOR, 0, 0, WIDTH, HEIGHT, &data)
+            .await
+    }
+
+    async fn send_desktop_size(&self, width: u16, height: u16) -> Result<(), std::io::Error> {
+        if self.supports_extended_desktop_size.load(Ordering::Relaxed) {
+            self.send_extended_desktop_size(0, 0, width, height).await
+        } else if self.supports_desktop_size.load(Ordering::Relaxed) {
+            self.send_pseudo_rect(ENCODING_DESKTOP_SIZE, 0, 0, width, height, &[])
+                .await
+        } else {
+            Ok(())
+        }
+    }
+
+    async fn send_desktop_name(&self, name: &str) -> Result<(), std::io::Error> {
+        if !self.supports_desktop_name.load(Ordering::Relaxed) {
+            return Ok(());
+        }
+        let mut data = BytesMut::with_capacity(4 + name.len());
+        data.put_u32(u32::try_from(name.len()).map_err(|_| {
+            std::io::Error::new(std::io::ErrorKind::InvalidInput, "desktop name is too long")
+        })?);
+        data.put_slice(name.as_bytes());
+        self.send_pseudo_rect(ENCODING_DESKTOP_NAME, 0, 0, 0, 0, &data)
+            .await
+    }
+
+    async fn send_extended_clipboard_action(
+        &self,
+        flags: u32,
+        body: &[u8],
+    ) -> Result<(), std::io::Error> {
+        let length = 4usize.saturating_add(body.len());
+        let capacity = 8usize.saturating_add(length);
+        let length = i32::try_from(length).map_err(|_| {
+            std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "clipboard payload too large",
+            )
+        })?;
+        let mut response = BytesMut::with_capacity(capacity);
+        response.put_u8(SERVER_MSG_SERVER_CUT_TEXT);
+        response.put_bytes(0, 3);
+        response.put_i32(-length);
+        response.put_u32(flags);
+        response.put_slice(body);
+        let _guard = self.send_mutex.lock().await;
+        self.write_stream.lock().await.write_all(&response).await
+    }
+
+    async fn send_extended_clipboard_provide(&self, text: &str) -> Result<(), std::io::Error> {
+        let text = text.replace("\r\n", "\n").replace('\n', "\r\n");
+        let mut uncompressed = BytesMut::with_capacity(5 + text.len());
+        uncompressed.put_u32(u32::try_from(text.len() + 1).map_err(|_| {
+            std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "clipboard text is too long",
+            )
+        })?);
+        uncompressed.put_slice(text.as_bytes());
+        uncompressed.put_u8(0);
+        let mut encoder = ZlibEncoder::new(Vec::new(), Compression::default());
+        Write::write_all(&mut encoder, &uncompressed)?;
+        let compressed = encoder.finish()?;
+        self.send_extended_clipboard_action((1 << 28) | 1, &compressed)
+            .await
+    }
+
+    async fn handle_extended_clipboard(&mut self, payload: &[u8]) -> Result<(), std::io::Error> {
+        if payload.len() < 4 {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "extended clipboard message is truncated",
+            ));
+        }
+        let flags = u32::from_be_bytes(payload[..4].try_into().unwrap());
+        let text = flags & 1 != 0;
+        if flags & (1 << 25) != 0 && text {
+            if let Some(pending) = self.pending_clipboard.as_deref() {
+                self.send_extended_clipboard_provide(pending).await?;
+            }
+        } else if flags & (1 << 27) != 0 && text {
+            self.send_extended_clipboard_action((1 << 25) | 1, &[])
+                .await?;
+        } else if flags & (1 << 28) != 0 && text {
+            let mut decoder = ZlibDecoder::new(&payload[4..]);
+            let mut uncompressed = Vec::new();
+            Read::read_to_end(&mut decoder, &mut uncompressed)?;
+            if uncompressed.len() < 4 {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    "extended clipboard text is truncated",
+                ));
+            }
+            let length = u32::from_be_bytes(uncompressed[..4].try_into().unwrap()) as usize;
+            if length == 0 || length > uncompressed.len() - 4 {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    "extended clipboard text length is invalid",
+                ));
+            }
+            let bytes = &uncompressed[4..4 + length - 1];
+            let text = String::from_utf8(bytes.to_vec())
+                .map_err(|_| {
+                    std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        "clipboard text is not UTF-8",
+                    )
+                })?
+                .replace("\r\n", "\n");
+            let _ = self.event_tx.send(ClientEvent::CutText { text });
+        }
+        Ok(())
+    }
+
+    async fn send_extended_clipboard_caps(&self) -> Result<(), std::io::Error> {
+        const CLIPBOARD_TEXT: u32 = 1;
+        const CLIPBOARD_CAPS: u32 = 1 << 24;
+        const CLIPBOARD_REQUEST: u32 = 1 << 25;
+        const CLIPBOARD_NOTIFY: u32 = 1 << 27;
+        const CLIPBOARD_PROVIDE: u32 = 1 << 28;
+
+        let mut payload = BytesMut::with_capacity(8);
+        payload.put_u32(
+            CLIPBOARD_TEXT
+                | CLIPBOARD_CAPS
+                | CLIPBOARD_REQUEST
+                | CLIPBOARD_NOTIFY
+                | CLIPBOARD_PROVIDE,
+        );
+        payload.put_u32(0);
+
+        self.send_extended_clipboard_action(
+            CLIPBOARD_TEXT
+                | CLIPBOARD_CAPS
+                | CLIPBOARD_REQUEST
+                | CLIPBOARD_NOTIFY
+                | CLIPBOARD_PROVIDE,
+            &payload[4..],
+        )
+        .await
     }
 
     /// Sends a batched framebuffer update message to the client.
@@ -1116,7 +1695,12 @@ impl VncClient {
         // Message type
         response.put_u8(SERVER_MSG_FRAMEBUFFER_UPDATE);
         response.put_u8(0); // padding
-        response.put_u16(total_rects as u16); // number of rectangles
+        let use_last_rect = self.supports_last_rect.load(Ordering::Relaxed);
+        response.put_u16(if use_last_rect {
+            u16::MAX
+        } else {
+            total_rects as u16
+        });
 
         #[cfg(feature = "debug-logging")]
         info!("Writing framebuffer update header: total_rects={total_rects}");
@@ -1734,6 +2318,17 @@ impl VncClient {
             }
         }
 
+        if use_last_rect {
+            Rectangle {
+                x: 0,
+                y: 0,
+                width: 0,
+                height: 0,
+                encoding: ENCODING_LAST_RECT,
+            }
+            .write_header(&mut response);
+        }
+
         // Acquire send mutex to prevent interleaved writes
         #[cfg(feature = "debug-logging")]
         info!("DEBUG: About to send response, total_rects={}, response.len()={}, copy_rect_count={}, modified_regions={}",
@@ -1781,16 +2376,29 @@ impl VncClient {
     /// `Ok(())` on successful transmission, or `Err(std::io::Error)` if an I/O error occurs.
     #[allow(clippy::cast_possible_truncation)] // Clipboard text length limited to u32 per VNC protocol
     pub async fn send_cut_text(&mut self, text: String) -> Result<(), std::io::Error> {
+        let text = text.replace("\r\n", "\n");
+        let text: Vec<u8> = text
+            .chars()
+            .map(|character| u8::try_from(u32::from(character)).unwrap_or(b'?'))
+            .collect();
         let mut msg = BytesMut::new();
         msg.put_u8(SERVER_MSG_SERVER_CUT_TEXT);
-        msg.put_bytes(0, 3); // padding
+        msg.put_bytes(0, 3);
         msg.put_u32(text.len() as u32);
-        msg.put_slice(text.as_bytes());
+        msg.put_slice(&text);
 
         // Acquire send mutex to prevent interleaved writes
         let _lock = self.send_mutex.lock().await;
         self.write_stream.lock().await.write_all(&msg).await?;
         Ok(())
+    }
+
+    pub fn is_shared(&self) -> bool {
+        self.shared
+    }
+
+    pub(crate) fn command_sender(&self) -> mpsc::Sender<ClientCommand> {
+        self.command_tx.clone()
     }
 
     /// Returns the unique client ID assigned by the server.
@@ -1802,9 +2410,7 @@ impl VncClient {
     ///
     /// This allows external code to close the write half directly for shutdown,
     /// which will cause reads on the read half to fail naturally.
-    pub fn get_write_stream_handle(
-        &self,
-    ) -> Arc<tokio::sync::Mutex<tokio::net::tcp::OwnedWriteHalf>> {
+    pub fn get_write_stream_handle(&self) -> Arc<tokio::sync::Mutex<ClientWriteStream>> {
         self.write_stream.clone()
     }
 
@@ -1884,6 +2490,331 @@ mod tests {
         assert_eq!(wire_format.blue_shift, 0);
     }
 
+    async fn connect_with_version(
+        version: &[u8; 12],
+    ) -> (VncClient, TcpStream, mpsc::UnboundedReceiver<ClientEvent>) {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let version = *version;
+        let peer = tokio::spawn(async move {
+            let mut stream = TcpStream::connect(address).await.unwrap();
+            let mut server_version = [0; 12];
+            stream.read_exact(&mut server_version).await.unwrap();
+            stream.write_all(&version).await.unwrap();
+            if &version == PROTOCOL_VERSION_3_3 {
+                let mut security = [0; 4];
+                stream.read_exact(&mut security).await.unwrap();
+                assert_eq!(u32::from_be_bytes(security), u32::from(SECURITY_TYPE_NONE));
+            } else {
+                let mut offered = [0; 2];
+                stream.read_exact(&mut offered).await.unwrap();
+                assert_eq!(offered, [1, SECURITY_TYPE_NONE]);
+                stream.write_all(&[SECURITY_TYPE_NONE]).await.unwrap();
+                if &version == PROTOCOL_VERSION_3_8 {
+                    let mut result = [0; 4];
+                    stream.read_exact(&mut result).await.unwrap();
+                    assert_eq!(u32::from_be_bytes(result), SECURITY_RESULT_OK);
+                }
+            }
+            stream.write_all(&[1]).await.unwrap();
+            let mut dimensions = [0; 4];
+            stream.read_exact(&mut dimensions).await.unwrap();
+            assert_eq!(dimensions, [0, 1, 0, 1]);
+            let mut pixel_format = [0; 16];
+            stream.read_exact(&mut pixel_format).await.unwrap();
+            let mut name_length = [0; 4];
+            stream.read_exact(&mut name_length).await.unwrap();
+            let mut name = vec![0; u32::from_be_bytes(name_length) as usize];
+            stream.read_exact(&mut name).await.unwrap();
+            stream
+        });
+        let (stream, _) = listener.accept().await.unwrap();
+        let (event_tx, event_rx) = mpsc::unbounded_channel();
+        let client = VncClient::new(
+            1,
+            stream,
+            Framebuffer::new(1, 1),
+            "test".into(),
+            None,
+            event_tx,
+        )
+        .await
+        .unwrap();
+        (client, peer.await.unwrap(), event_rx)
+    }
+
+    #[tokio::test]
+    async fn negotiates_rfb_3_3_3_7_and_3_8() {
+        for version in [
+            PROTOCOL_VERSION_3_3,
+            PROTOCOL_VERSION_3_7,
+            PROTOCOL_VERSION_3_8,
+        ] {
+            let (_client, _peer, _events) = connect_with_version(version).await;
+        }
+    }
+
+    fn set_encoding(encoding: i32) -> [u8; 8] {
+        let mut message = [0u8; 8];
+        message[0] = CLIENT_MSG_SET_ENCODINGS;
+        message[2..4].copy_from_slice(&1u16.to_be_bytes());
+        message[4..].copy_from_slice(&encoding.to_be_bytes());
+        message
+    }
+
+    #[tokio::test]
+    async fn negotiates_fence_and_extended_key_events() {
+        let (mut client, mut peer, mut events) = connect_with_version(PROTOCOL_VERSION_3_8).await;
+        let task = tokio::spawn(async move { client.handle_messages().await });
+
+        peer.write_all(&set_encoding(ENCODING_FENCE)).await.unwrap();
+        let mut fence = [0u8; 9];
+        peer.read_exact(&mut fence).await.unwrap();
+        assert_eq!(fence[0], SERVER_MSG_FENCE);
+
+        let payload = b"sync";
+        let mut request = BytesMut::new();
+        request.put_u8(CLIENT_MSG_FENCE);
+        request.put_bytes(0, 3);
+        request.put_u32(0x8000_0007);
+        request.put_u8(4);
+        request.put_slice(payload);
+        peer.write_all(&request).await.unwrap();
+        let mut response = [0u8; 13];
+        peer.read_exact(&mut response).await.unwrap();
+        assert_eq!(&response[4..8], &7u32.to_be_bytes());
+        assert_eq!(&response[9..], payload);
+
+        peer.write_all(&set_encoding(ENCODING_QEMU_EXTENDED_KEY_EVENT))
+            .await
+            .unwrap();
+        let mut qemu_ack = [0u8; 16];
+        peer.read_exact(&mut qemu_ack).await.unwrap();
+        assert_eq!(
+            i32::from_be_bytes(qemu_ack[12..16].try_into().unwrap()),
+            -258
+        );
+        let mut key = BytesMut::new();
+        key.put_u8(CLIENT_MSG_QEMU);
+        key.put_u8(0);
+        key.put_u16(1);
+        key.put_u32(0x61);
+        key.put_u32(0x1e);
+        peer.write_all(&key).await.unwrap();
+        match events.recv().await.unwrap() {
+            ClientEvent::ExtendedKeyPress {
+                down,
+                keysym,
+                keycode,
+            } => assert!(down && keysym == 0x61 && keycode == 0x1e),
+            _ => panic!("expected extended key event"),
+        }
+        task.abort();
+    }
+
+    #[tokio::test]
+    async fn reports_extended_desktop_size_and_decodes_latin1_clipboard() {
+        let (mut client, mut peer, mut events) = connect_with_version(PROTOCOL_VERSION_3_8).await;
+        let commands = client.command_sender();
+        let task = tokio::spawn(async move { client.handle_messages().await });
+        peer.write_all(&set_encoding(ENCODING_EXTENDED_DESKTOP_SIZE))
+            .await
+            .unwrap();
+        // A second capability with a server acknowledgment makes the first SetEncodings
+        // observably complete before the asynchronous desktop-size command is queued.
+        peer.write_all(&set_encoding(ENCODING_QEMU_EXTENDED_KEY_EVENT))
+            .await
+            .unwrap();
+        let mut qemu_ack = [0u8; 16];
+        peer.read_exact(&mut qemu_ack).await.unwrap();
+        let (sent, received) = oneshot::channel();
+        commands
+            .send(ClientCommand::DesktopSize {
+                width: 1,
+                height: 1,
+                sent,
+            })
+            .await
+            .unwrap();
+        received.await.unwrap();
+        let mut desktop_size = [0u8; 36];
+        peer.read_exact(&mut desktop_size).await.unwrap();
+        assert_eq!(
+            i32::from_be_bytes(desktop_size[12..16].try_into().unwrap()),
+            ENCODING_EXTENDED_DESKTOP_SIZE
+        );
+        assert_eq!(&desktop_size[8..12], &[0, 1, 0, 1]);
+
+        peer.write_all(&[6, 0, 0, 0, 0, 0, 0, 1, 0xe9])
+            .await
+            .unwrap();
+        match events.recv().await.unwrap() {
+            ClientEvent::CutText { text } => assert_eq!(text, "é"),
+            _ => panic!("expected clipboard event"),
+        }
+        task.abort();
+    }
+
+    #[tokio::test]
+    async fn continuous_updates_use_last_rect_and_confirm_disable() {
+        let (mut client, mut peer, _events) = connect_with_version(PROTOCOL_VERSION_3_8).await;
+        let task = tokio::spawn(async move { client.handle_messages().await });
+        let mut encodings = BytesMut::new();
+        encodings.put_u8(CLIENT_MSG_SET_ENCODINGS);
+        encodings.put_u8(0);
+        encodings.put_u16(2);
+        encodings.put_i32(ENCODING_CONTINUOUS_UPDATES);
+        encodings.put_i32(ENCODING_LAST_RECT);
+        peer.write_all(&encodings).await.unwrap();
+        let mut confirmation = [0u8; 1];
+        peer.read_exact(&mut confirmation).await.unwrap();
+        assert_eq!(confirmation, [SERVER_MSG_END_OF_CONTINUOUS_UPDATES]);
+
+        peer.write_all(&[150, 1, 0, 0, 0, 0, 0, 1, 0, 1])
+            .await
+            .unwrap();
+        peer.write_all(&[3, 0, 0, 0, 0, 0, 0, 1, 0, 1])
+            .await
+            .unwrap();
+        let mut update = [0u8; 32];
+        peer.read_exact(&mut update).await.unwrap();
+        assert_eq!(&update[..4], &[0, 0, 0xff, 0xff]);
+        assert_eq!(
+            i32::from_be_bytes(update[28..32].try_into().unwrap()),
+            ENCODING_LAST_RECT
+        );
+
+        peer.write_all(&[150, 0, 0, 0, 0, 0, 0, 1, 0, 1])
+            .await
+            .unwrap();
+        peer.read_exact(&mut confirmation).await.unwrap();
+        assert_eq!(confirmation, [SERVER_MSG_END_OF_CONTINUOUS_UPDATES]);
+        task.abort();
+    }
+
+    #[tokio::test]
+    async fn exchanges_extended_utf8_clipboard_text() {
+        let (mut client, mut peer, mut events) = connect_with_version(PROTOCOL_VERSION_3_8).await;
+        let commands = client.command_sender();
+        let task = tokio::spawn(async move { client.handle_messages().await });
+        peer.write_all(&set_encoding(ENCODING_EXTENDED_CLIPBOARD))
+            .await
+            .unwrap();
+        let mut caps = [0u8; 16];
+        peer.read_exact(&mut caps).await.unwrap();
+        assert_eq!(i32::from_be_bytes(caps[4..8].try_into().unwrap()), -8);
+
+        let text = "héllo\r\nworld\0";
+        let mut clipboard = BytesMut::new();
+        clipboard.put_u32(u32::try_from(text.len()).unwrap());
+        clipboard.put_slice(text.as_bytes());
+        let mut encoder = ZlibEncoder::new(Vec::new(), Compression::default());
+        Write::write_all(&mut encoder, &clipboard).unwrap();
+        let compressed = encoder.finish().unwrap();
+        let payload_length = 4 + compressed.len();
+        let mut provide = BytesMut::new();
+        provide.put_u8(CLIENT_MSG_CLIENT_CUT_TEXT);
+        provide.put_bytes(0, 3);
+        provide.put_i32(-i32::try_from(payload_length).unwrap());
+        provide.put_u32((1 << 28) | 1);
+        provide.put_slice(&compressed);
+        peer.write_all(&provide).await.unwrap();
+        match events.recv().await.unwrap() {
+            ClientEvent::CutText { text } => assert_eq!(text, "héllo\nworld"),
+            _ => panic!("expected extended clipboard event"),
+        }
+
+        commands
+            .send(ClientCommand::CutText("remote ✓".into()))
+            .await
+            .unwrap();
+        let mut notify = [0u8; 12];
+        peer.read_exact(&mut notify).await.unwrap();
+        assert_eq!(
+            u32::from_be_bytes(notify[8..12].try_into().unwrap()),
+            (1 << 27) | 1
+        );
+        task.abort();
+    }
+
+    #[tokio::test]
+    async fn authenticates_x509_plain_inside_tls() {
+        let certificate = rcgen::generate_simple_self_signed(vec!["vinny.local".into()]).unwrap();
+        let certificate_der = certificate.cert.der().clone();
+        let key =
+            rustls::pki_types::PrivatePkcs8KeyDer::from(certificate.signing_key.serialize_der());
+        let tls = rustls::ServerConfig::builder()
+            .with_no_client_auth()
+            .with_single_cert(
+                vec![certificate_der.clone()],
+                rustls::pki_types::PrivateKeyDer::Pkcs8(key),
+            )
+            .unwrap();
+        let security = SecurityConfig::VeNCrypt {
+            tls: Arc::new(tls),
+            password: "secret".into(),
+        };
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let peer = tokio::spawn(async move {
+            let mut stream = TcpStream::connect(address).await.unwrap();
+            let mut version = [0; 12];
+            stream.read_exact(&mut version).await.unwrap();
+            stream.write_all(PROTOCOL_VERSION_3_8).await.unwrap();
+            let mut offered = [0; 2];
+            stream.read_exact(&mut offered).await.unwrap();
+            assert_eq!(offered, [1, SECURITY_TYPE_VENCRYPT]);
+            stream.write_all(&[SECURITY_TYPE_VENCRYPT]).await.unwrap();
+            let mut vencrypt_version = [0; 2];
+            stream.read_exact(&mut vencrypt_version).await.unwrap();
+            assert_eq!(vencrypt_version, [0, 2]);
+            stream.write_all(&[0, 2]).await.unwrap();
+            let mut ack_and_count = [0; 2];
+            stream.read_exact(&mut ack_and_count).await.unwrap();
+            assert_eq!(ack_and_count, [0, 1]);
+            let mut subtype = [0; 4];
+            stream.read_exact(&mut subtype).await.unwrap();
+            assert_eq!(u32::from_be_bytes(subtype), 262);
+            stream.write_all(&subtype).await.unwrap();
+            let mut tls_ack = [0; 1];
+            stream.read_exact(&mut tls_ack).await.unwrap();
+            assert_eq!(tls_ack, [1]);
+
+            let mut roots = rustls::RootCertStore::empty();
+            roots.add(certificate_der).unwrap();
+            let client_config = rustls::ClientConfig::builder()
+                .with_root_certificates(roots)
+                .with_no_client_auth();
+            let connector = tokio_rustls::TlsConnector::from(Arc::new(client_config));
+            let server_name = rustls::pki_types::ServerName::try_from("vinny.local").unwrap();
+            let mut stream = connector.connect(server_name, stream).await.unwrap();
+            stream.write_all(&0u32.to_be_bytes()).await.unwrap();
+            stream.write_all(&6u32.to_be_bytes()).await.unwrap();
+            stream.write_all(b"secret").await.unwrap();
+            let mut security_result = [0; 4];
+            stream.read_exact(&mut security_result).await.unwrap();
+            assert_eq!(security_result, [0; 4]);
+            stream.write_all(&[1]).await.unwrap();
+            let mut dimensions = [0; 4];
+            stream.read_exact(&mut dimensions).await.unwrap();
+            assert_eq!(dimensions, [0, 1, 0, 1]);
+        });
+        let (stream, _) = listener.accept().await.unwrap();
+        let (event_tx, _event_rx) = mpsc::unbounded_channel();
+        let result = VncClient::new_with_security(
+            1,
+            stream,
+            Framebuffer::new(1, 1),
+            "test".into(),
+            security,
+            event_tx,
+        )
+        .await;
+        peer.await.unwrap();
+        assert!(result.is_ok());
+    }
+
     #[tokio::test]
     async fn rejects_a_security_type_that_was_not_offered() {
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -1896,7 +2827,10 @@ mod tests {
             let mut offered = [0; 2];
             stream.read_exact(&mut offered).await.unwrap();
             assert_eq!(offered, [1, SECURITY_TYPE_NONE]);
-            stream.write_all(&[SECURITY_TYPE_VNC_AUTH]).await.unwrap();
+            stream
+                .write_all(&[2]) // Legacy VNCAuth was not offered.
+                .await
+                .unwrap();
         });
         let (stream, _) = listener.accept().await.unwrap();
         let framebuffer = Framebuffer::new(1, 1);

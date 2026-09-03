@@ -2,7 +2,7 @@
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
-port=5900
+port="${PORT:-5900}"
 app="${APP:-$(pwd)/dist/Vinny.app}"
 if [[ ! -x "$app/Contents/MacOS/vinny" ]]; then
   echo "Build Vinny.app with ./scripts/package.sh first" >&2

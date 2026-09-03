@@ -60,6 +60,12 @@ pub use rfb_encodings::{
 /// by modern VNC clients. The version string must be exactly 12 bytes including
 /// the newline character as specified by the RFB protocol.
 pub const PROTOCOL_VERSION: &str = "RFB 003.008\n";
+/// RFB 3.3 protocol-version message.
+pub const PROTOCOL_VERSION_3_3: &[u8; 12] = b"RFB 003.003\n";
+/// RFB 3.7 protocol-version message.
+pub const PROTOCOL_VERSION_3_7: &[u8; 12] = b"RFB 003.007\n";
+/// RFB 3.8 protocol-version message.
+pub const PROTOCOL_VERSION_3_8: &[u8; 12] = b"RFB 003.008\n";
 
 /// Maximum framebuffer update buffer size in bytes (32KB).
 ///
@@ -111,6 +117,12 @@ pub const CLIENT_MSG_CLIENT_CUT_TEXT: u8 = 6;
 /// pushes framebuffer updates without waiting for `FramebufferUpdateRequest`.
 /// Message format: type (u8) + enable (u8) + x (u16) + y (u16) + w (u16) + h (u16)
 pub const CLIENT_MSG_ENABLE_CONTINUOUS_UPDATES: u8 = 150;
+/// Message type: client fence synchronization request.
+pub const CLIENT_MSG_FENCE: u8 = 248;
+/// Message type: client desktop-size request.
+pub const CLIENT_MSG_SET_DESKTOP_SIZE: u8 = 251;
+/// Message type: QEMU extension container.
+pub const CLIENT_MSG_QEMU: u8 = 255;
 
 // Server-to-Client Message Types
 
@@ -144,6 +156,8 @@ pub const SERVER_MSG_SERVER_CUT_TEXT: u8 = 3;
 /// it supports the `ContinuousUpdates` extension when client advertises -313.
 /// Also sent when continuous updates are disabled.
 pub const SERVER_MSG_END_OF_CONTINUOUS_UPDATES: u8 = 150;
+/// Message type: server fence synchronization response.
+pub const SERVER_MSG_FENCE: u8 = 248;
 
 // Encoding Types
 //
@@ -209,13 +223,20 @@ pub const ENCODING_COMPRESS_LEVEL_0: i32 = -256;
 /// for reduced bandwidth usage.
 pub const ENCODING_COMPRESS_LEVEL_9: i32 = -247;
 
-/// Pseudo-encoding: Continuous Updates.
-///
-/// When included in the client's encoding list, this indicates the client
-/// supports the `ContinuousUpdates` extension. The server should respond with
-/// an `EndOfContinuousUpdates` message (type 150) to confirm support.
-/// Once confirmed, the client can send `EnableContinuousUpdates` messages.
+/// Pseudo-encoding: variable update terminated by a `LastRect` rectangle.
+pub const ENCODING_LAST_RECT: i32 = -224;
+/// Pseudo-encoding: QEMU layout-independent key events.
+pub const ENCODING_QEMU_EXTENDED_KEY_EVENT: i32 = -258;
+/// Pseudo-encoding: UTF-8 desktop-name changes.
+pub const ENCODING_DESKTOP_NAME: i32 = -307;
+/// Pseudo-encoding: framebuffer size and screen layout.
+pub const ENCODING_EXTENDED_DESKTOP_SIZE: i32 = -308;
+/// Pseudo-encoding: stream synchronization fences.
+pub const ENCODING_FENCE: i32 = -312;
+/// Pseudo-encoding: unsolicited continuous framebuffer updates.
 pub const ENCODING_CONTINUOUS_UPDATES: i32 = -313;
+/// Pseudo-encoding: capability-negotiated UTF-8 clipboard messages.
+pub const ENCODING_EXTENDED_CLIPBOARD: i32 = i32::from_be_bytes(0xc0a1_e5ceu32.to_be_bytes());
 
 // Note: Hextile and Tight subencoding constants are re-exported from rfb-encodings
 // at the top of this file.
@@ -234,12 +255,8 @@ pub const SECURITY_TYPE_INVALID: u8 = 0;
 /// to the initialization phase.
 pub const SECURITY_TYPE_NONE: u8 = 1;
 
-/// Security type: VNC Authentication.
-///
-/// Standard VNC authentication using DES-encrypted challenge-response.
-/// The server sends a 16-byte challenge, which the client encrypts with
-/// the password and returns.
-pub const SECURITY_TYPE_VNC_AUTH: u8 = 2;
+/// Security type: `VeNCrypt` 0.2 negotiation.
+pub const SECURITY_TYPE_VENCRYPT: u8 = 19;
 
 // Security Results
 

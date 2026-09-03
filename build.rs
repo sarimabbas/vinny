@@ -37,6 +37,7 @@ fn main() {
     println!("cargo:rustc-link-arg={}", swift_object.display());
     println!("cargo:rustc-link-lib=framework=AppKit");
     println!("cargo:rustc-link-lib=framework=CoreText");
+    println!("cargo:rustc-link-lib=framework=Security");
     println!("cargo:rustc-link-lib=framework=SwiftUI");
     println!("cargo:rustc-link-arg=-Wl,-sectcreate,__TEXT,__info_plist,{manifest}/Info.plist");
     println!("cargo:rustc-link-arg=-Wl,-rpath,/usr/lib/swift");
