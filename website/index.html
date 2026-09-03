@@ -32,10 +32,9 @@
             <canvas id="vinny-canvas"></canvas>
           </section>
 
-          <section class="terminal" aria-label="Vinny server status">
-            <div class="terminal-bar"><i></i><i></i><i></i><span>Vinny</span></div>
-            <pre><code><em>●</em> Vinny is ready
-  listening on 127.0.0.1:5900</code></pre>
+          <section class="terminal" aria-label="Vinny Homebrew installation command">
+            <div class="terminal-bar"><i></i><i></i><i></i><span>Terminal</span></div>
+            <pre><code><span class="shell-command">brew</span> <span class="shell-action">install</span> <span class="shell-flag">--cask</span> <span class="shell-package">sarimabbas/tap/vinny</span></code></pre>
           </section>
 
           <a class="github" href="https://github.com/sarimabbas/vinny">
@@ -50,26 +49,112 @@
 
     <section class="docs" aria-labelledby="docs-title">
       <div class="docs-inner">
-        <h2 id="docs-title">Ready in three steps</h2>
-        <div class="usage"><code>open -a Vinny</code></div>
+        <h2 id="docs-title">App <span class="heading-quote">“</span>screen<span class="heading-quote">”</span>-shot</h2>
 
-        <dl class="options">
-          <div>
-            <dt>Open Vinny</dt>
-            <dd>Launch it from your Applications folder.</dd>
-          </div>
-          <div>
-            <dt>Allow access</dt>
-            <dd>Grant Screen Recording and Accessibility once.</dd>
-          </div>
-          <div>
-            <dt>Connect</dt>
-            <dd>Point any local VNC client at <span>127.0.0.1:5900</span></dd>
-          </div>
-        </dl>
+        <div class="how-stage">
+          <section class="app-window" aria-label="Interactive Vinny app preview">
+            <div class="app-titlebar" aria-hidden="true">
+              <span></span><span></span><span></span>
+              <b>Vinny</b>
+            </div>
+
+            <div class="app-content">
+              <header class="app-brand">
+                <div>
+                  <h3>vinny</h3>
+                  <p>A tiny VNC server for your Mac</p>
+                </div>
+                <div class="app-mascot" aria-hidden="true"></div>
+              </header>
+
+              <div class="permission-list">
+                <div class="permission-card">
+                  <span class="permission-dot">✓</span>
+                  <span><b>Screen recording</b><small>Lets Vinny show this Mac over VNC</small></span>
+                  <button type="button" disabled>Allowed</button>
+                </div>
+                <div class="permission-card">
+                  <span class="permission-dot">✓</span>
+                  <span><b>Accessibility</b><small>Lets remote keyboard and pointer input work</small></span>
+                  <button type="button" disabled>Allowed</button>
+                </div>
+              </div>
+
+              <div class="server-heading">
+                <h4>Servers</h4>
+              </div>
+
+              <form class="server-card" id="server-card">
+                <div class="server-card-head">
+                  <span class="server-status-dot"></span>
+                  <strong>Server 1</strong>
+                  <span class="server-status" aria-live="polite">stopped</span>
+                  <label class="server-toggle">
+                    <input id="server-toggle" type="checkbox" autocomplete="off" />
+                    <span aria-hidden="true"></span>
+                    <span class="sr-only">Enable server</span>
+                  </label>
+                </div>
+
+                <label class="setting-row">
+                  <span>Display</span>
+                  <select id="display-select">
+                    <option>Display 1 (Built-in Retina Display)</option>
+                    <option>Display 2 (Studio Display)</option>
+                  </select>
+                </label>
+
+                <label class="setting-row">
+                  <span>Maximum width</span>
+                  <input type="number" value="1920" min="320" max="7680" />
+                </label>
+
+                <div class="setting-row">
+                  <span>Frame rate</span>
+                  <div class="stepper">
+                    <button type="button" data-step="-1" aria-label="Decrease frame rate">−</button>
+                    <output id="fps-output">20 FPS</output>
+                    <button type="button" data-step="1" aria-label="Increase frame rate">+</button>
+                  </div>
+                </div>
+
+                <div class="setting-row">
+                  <span>Listen on</span>
+                  <div class="listen-fields">
+                    <input id="listen-address" value="127.0.0.1" aria-label="Listen address" />
+                    <span>:</span>
+                    <input id="listen-port" type="number" value="5900" min="1" max="65535" aria-label="Port" />
+                  </div>
+                </div>
+
+                <div class="server-actions">
+                  <button class="apply-button" id="apply-server" type="button">Apply &amp; restart</button>
+                </div>
+              </form>
+            </div>
+          </section>
+
+          <aside class="pip-preview" id="pip-preview" aria-hidden="true">
+            <div class="pip-bar"><span></span><b>Live</b><code id="pip-address">127.0.0.1:5900</code></div>
+            <div class="pip-desktop">
+              <div class="pip-menu"><i></i><i></i><i></i></div>
+              <div class="pip-window">
+                <div></div>
+                <span></span><span></span><span></span>
+              </div>
+              <div class="pip-cursor"></div>
+            </div>
+          </aside>
+        </div>
       </div>
-      <img class="docs-art" src="/assets/vinny-jump-white.png" alt="" />
     </section>
+
+    <footer class="site-footer">
+      <div class="footer-inner">
+        <p class="footer-brand">Fuzzy Foundry, LLC</p>
+        <img class="footer-art" src="/assets/vinny-jump-black.png?v=2" alt="Vinny jumping out of a glowing remote desktop" />
+      </div>
+    </footer>
 
     <script type="module" src="/src/main.js"></script>
   </body>
