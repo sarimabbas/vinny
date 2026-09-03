@@ -5,7 +5,7 @@ cd "$(dirname "$0")/.."
 app="$(pwd)/dist/Vinny.app"
 identity="${SIGN_IDENTITY:--}"
 
-cargo build --release
+cargo build --release --locked
 rm -rf "$app"
 mkdir -p "$app/Contents/MacOS" "$app/Contents/Frameworks" "$app/Contents/Resources"
 cp Info.plist "$app/Contents/Info.plist"
