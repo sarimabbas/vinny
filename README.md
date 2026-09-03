@@ -1,6 +1,6 @@
-# macos-vnc-server
+# Vinny
 
-A small VNC server for the active macOS desktop. It captures a display with ScreenCaptureKit, serves it through RFB, and forwards keyboard and pointer events through macOS input APIs.
+Vinny is a small VNC server for the active macOS desktop. It captures a display with ScreenCaptureKit, serves it through RFB, and forwards keyboard and pointer events through macOS input APIs.
 
 It listens on loopback by default for use behind an authenticated local proxy or WebSocket bridge. It can bind directly to an explicit Tailscale address, while refusing wildcard and LAN addresses.
 
@@ -82,11 +82,7 @@ This uses an ad-hoc signature by default. For distribution:
 SIGN_IDENTITY='Developer ID Application: …' ./scripts/package.sh
 ```
 
-The result is `dist/macOS VNC Server.app`. Invoke its CLI directly:
-
-```bash
-'dist/macOS VNC Server.app/Contents/MacOS/macos-vnc-server' serve
-```
+The result is a signed Vinny app bundle in `dist/`. Its embedded CLI accepts the same commands and options shown above.
 
 A stable Developer ID signature and bundle identifier are important because macOS associates privacy grants with code identity.
 
