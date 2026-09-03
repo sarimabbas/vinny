@@ -7,31 +7,12 @@ Vinny is a small VNC server for macOS. It captures configured displays with Scre
 
 Vinny is a menu-bar app. Open it, grant Screen Recording and Accessibility once, then connect any VNC client. The default server listens only on `127.0.0.1:5900`.
 
-## Status
-
-Early MVP:
-
-- One configurable VNC server per display, all within one app process
-- Persistent display, port, maximum-width, frame-rate, and listen-address settings
-- Retina-aware input scaling
-- Raw, Hextile, Tight, ZRLE, and other noVNC-compatible encodings through `rustvncserver`
-- Mouse, scrolling, common keys, modifiers, and Unicode input
-- Guided Screen Recording and Accessibility permission setup
-- Configurable IPv4 or IPv6 listeners, with a safe loopback default
-
-Not yet implemented: VNC authentication, clipboard sync, and login-window control.
-
-> [!WARNING]
-> The RFB server currently has no built-in authentication or encryption. Vinny defaults to loopback. Use another listen address only on a trusted network, and never expose Vinny directly to the public internet.
-
 ## Install
 
-Homebrew 6 and newer require explicit trust for third-party taps:
+The fully qualified command trusts only the Vinny cask, not the entire third-party tap:
 
 ```bash
-brew tap sarimabbas/tap
-brew trust --cask sarimabbas/tap/vinny
-brew install --cask vinny
+brew install --cask sarimabbas/tap/vinny
 ```
 
 Then open Vinny from Applications.
@@ -81,6 +62,28 @@ After packaging and granting permissions:
 ```
 
 The smoke launches `Vinny.app`, verifies that port 5900 is loopback-only, completes an RFB 3.8 handshake, requests a framebuffer, and confirms captured pixels are non-empty.
+
+## Status
+
+- [x] One configurable VNC server per display in one app process
+- [x] Persistent display, port, maximum-width, frame-rate, and listen-address settings
+- [x] Retina-aware input scaling
+- [x] Raw, Hextile, Tight, ZRLE, and other noVNC-compatible encodings
+- [x] Mouse, scrolling, common keys, modifiers, and Unicode input
+- [x] Guided Screen Recording and Accessibility permission setup
+- [x] Configurable IPv4 and IPv6 listeners with a loopback default
+- [x] Bounded concurrent clients, handshake timeouts, and task cleanup
+- [ ] Authenticated, encrypted transport
+- [ ] Bidirectional clipboard synchronization
+- [ ] Remote cursor shape updates
+- [ ] Dynamic framebuffer and display-layout updates
+- [ ] Extended keyboard events for layout-independent input
+- [ ] View-only and single-client sharing policies
+- [ ] RFB 3.3 and 3.7 compatibility
+- [ ] Login-window control
+
+> [!WARNING]
+> The RFB server currently has no built-in authentication or encryption. Vinny defaults to loopback. Anyone who can reach a non-loopback listener can view the screen and control input.
 
 ## Implementation
 

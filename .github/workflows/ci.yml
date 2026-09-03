@@ -20,4 +20,6 @@ jobs:
           rustup default 1.90.0
       - run: cargo fmt --check
       - run: cargo test --locked
+      - run: cargo test --manifest-path vendor/rustvncserver/Cargo.toml
+      - run: cargo test --manifest-path vendor/rfb-encodings/Cargo.toml --lib
       - run: cargo clippy --locked --all-targets -- -D warnings
