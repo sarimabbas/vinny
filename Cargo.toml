@@ -14,7 +14,7 @@ categories = ["network-programming"]
 enigo = { version = "0.6.1", default-features = false }
 objc2-application-services = { version = "0.3.2", features = ["AXUIElement", "HIServices"] }
 objc2-core-foundation = { version = "0.3.2", features = ["CFDictionary", "CFNumber", "CFString"] }
-objc2-core-graphics = { version = "0.3.2", features = ["CGWindow"] }
+objc2-core-graphics = { version = "0.3.2", features = ["CGDirectDisplay", "CGWindow"] }
 rustvncserver = { path = "vendor/rustvncserver" }
 screencapturekit = "8.0.1"
 tokio = { version = "1.47", features = ["macros", "rt-multi-thread", "sync"] }

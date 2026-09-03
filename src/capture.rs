@@ -1,3 +1,4 @@
+use objc2_core_graphics::{CGDisplayCopyDisplayMode, CGDisplayMode};
 use screencapturekit::cv::CVPixelBufferLockFlags;
 use screencapturekit::prelude::*;
 use tokio::sync::mpsc;
@@ -68,6 +69,37 @@ impl SCStreamOutputTrait for Handler {
     }
 }
 
+fn capture_dimensions(native_width: u32, native_height: u32, max_width: u32) -> (u16, u16) {
+    let scale = (max_width as f64 / native_width as f64).min(1.0);
+    let width = ((native_width as f64 * scale).round() as u32).clamp(1, u16::MAX as u32);
+    let height = ((native_height as f64 * scale).round() as u32).clamp(1, u16::MAX as u32);
+    (width as u16, height as u16)
+}
+
+fn display_geometry(display: &SCDisplay, max_width: u32) -> Geometry {
+    let frame = display.frame();
+    let logical_width = frame.size.width.round().max(1.0) as u32;
+    let logical_height = frame.size.height.round().max(1.0) as u32;
+    let (native_width, native_height) = CGDisplayCopyDisplayMode(display.display_id())
+        .map(|mode| {
+            (
+                CGDisplayMode::pixel_width(Some(&mode)) as u32,
+                CGDisplayMode::pixel_height(Some(&mode)) as u32,
+            )
+        })
+        .unwrap_or_else(|| (display.width(), display.height()));
+    let (capture_width, capture_height) =
+        capture_dimensions(native_width, native_height, max_width);
+    Geometry {
+        origin_x: frame.origin.x.round() as i32,
+        origin_y: frame.origin.y.round() as i32,
+        logical_width,
+        logical_height,
+        capture_width,
+        capture_height,
+    }
+}
+
 pub fn start(
     display_index: usize,
     max_width: u32,
@@ -82,22 +114,14 @@ pub fn start(
             displays.len()
         )
     })?;
-    let frame = display.frame();
-    let logical_width = frame.size.width.round().max(1.0) as u32;
-    let logical_height = frame.size.height.round().max(1.0) as u32;
-    let scale = (max_width as f64 / logical_width as f64).min(1.0);
-    let capture_width =
-        ((logical_width as f64 * scale).round() as u32).clamp(1, u16::MAX as u32) as u16;
-    let capture_height =
-        ((logical_height as f64 * scale).round() as u32).clamp(1, u16::MAX as u32) as u16;
-
+    let geometry = display_geometry(display, max_width);
     let filter = SCContentFilter::create()
         .with_display(display)
         .with_excluding_windows(&[])
         .build();
     let config = SCStreamConfiguration::new()
-        .with_width(u32::from(capture_width))
-        .with_height(u32::from(capture_height))
+        .with_width(u32::from(geometry.capture_width))
+        .with_height(u32::from(geometry.capture_height))
         .with_pixel_format(PixelFormat::BGRA)
         .with_scales_to_fit(true)
         .with_shows_cursor(true)
@@ -107,22 +131,27 @@ pub fn start(
     stream.add_output_handler(
         Handler {
             frames,
-            width: usize::from(capture_width),
-            height: usize::from(capture_height),
+            width: usize::from(geometry.capture_width),
+            height: usize::from(geometry.capture_height),
         },
         SCStreamOutputType::Screen,
     );
     stream.start_capture()?;
 
-    Ok(Capture {
-        stream,
-        geometry: Geometry {
-            origin_x: frame.origin.x.round() as i32,
-            origin_y: frame.origin.y.round() as i32,
-            logical_width,
-            logical_height,
-            capture_width,
-            capture_height,
-        },
-    })
+    Ok(Capture { stream, geometry })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::capture_dimensions;
+
+    #[test]
+    fn max_width_scales_native_retina_pixels() {
+        assert_eq!(capture_dimensions(5120, 2880, 3840), (3840, 2160));
+    }
+
+    #[test]
+    fn max_width_does_not_upscale_past_native_resolution() {
+        assert_eq!(capture_dimensions(5120, 2880, 7680), (5120, 2880));
+    }
 }
