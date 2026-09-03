@@ -23,8 +23,8 @@ Before submitting a change, run the same checks as CI:
 ```bash
 cargo fmt --check
 cargo test --locked
-cargo test --manifest-path vendor/rustvncserver/Cargo.toml --locked
-cargo test --manifest-path vendor/rfb-encodings/Cargo.toml --locked --lib
+cargo test --manifest-path vendor/rustvncserver/Cargo.toml
+cargo test --manifest-path vendor/rfb-encodings/Cargo.toml --lib
 cargo clippy --locked --all-targets -- -D warnings
 ```
 

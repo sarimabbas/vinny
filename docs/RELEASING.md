@@ -18,8 +18,8 @@ Vinny releases are built, signed, notarized, published, and added to Homebrew by
    ```bash
    cargo fmt --check
    cargo test --locked
-   cargo test --manifest-path vendor/rustvncserver/Cargo.toml --locked
-   cargo test --manifest-path vendor/rfb-encodings/Cargo.toml --locked --lib
+   cargo test --manifest-path vendor/rustvncserver/Cargo.toml
+   cargo test --manifest-path vendor/rfb-encodings/Cargo.toml --lib
    cargo clippy --locked --all-targets -- -D warnings
    ./scripts/package.sh
    ```
