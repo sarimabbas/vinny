@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#f2efe7" />
+    <meta name="description" content="Vinny is a small native VNC server for macOS." />
+    <meta property="og:title" content="Vinny — VNC for macOS" />
+    <meta property="og:description" content="Native capture. Loopback by default. No account, no cloud." />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://vinny.lil.run/" />
+    <meta property="og:image" content="https://vinny.lil.run/og.png" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:image" content="https://vinny.lil.run/og.png" />
+    <title>Vinny — VNC for macOS</title>
+  </head>
+  <body>
+    <main>
+      <header class="nameplate">
+        <h1 id="title">vinny</h1>
+        <p>A tiny VNC server for your Mac</p>
+      </header>
+
+      <section class="demo" aria-labelledby="title">
+        <div class="terminal-scene">
+          <section class="playground" id="playground" aria-label="Play with Vinny" tabindex="0">
+            <canvas id="vinny-canvas"></canvas>
+          </section>
+
+          <section class="terminal" aria-label="Vinny command line example">
+            <div class="terminal-bar"><i></i><i></i><i></i><span>Terminal</span></div>
+            <pre><code><b>$</b> vinny serve
+<em>●</em> listening on 127.0.0.1:5900</code></pre>
+          </section>
+
+          <a class="github" href="https://github.com/sarimabbas/macos-vnc-server">
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path d="M12 .3a12 12 0 0 0-3.8 23.4c.6.1.8-.3.8-.6v-2.2c-3.3.7-4-1.4-4-1.4-.5-1.4-1.3-1.8-1.3-1.8-1.1-.7.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1.1 1.8 2.8 1.3 3.5 1 .1-.8.4-1.3.8-1.6-2.7-.3-5.5-1.3-5.5-5.9 0-1.3.5-2.4 1.2-3.2-.1-.3-.5-1.5.1-3.2 0 0 1-.3 3.3 1.2a11.5 11.5 0 0 1 6 0c2.3-1.5 3.3-1.2 3.3-1.2.7 1.7.2 2.9.1 3.2.8.8 1.2 1.9 1.2 3.2 0 4.6-2.8 5.6-5.5 5.9.4.4.8 1.1.8 2.2v3.3c0 .3.2.7.8.6A12 12 0 0 0 12 .3Z"/>
+            </svg>
+            <span>View on GitHub</span>
+          </a>
+        </div>
+      </section>
+    </main>
+
+    <section class="docs" aria-labelledby="docs-title">
+      <div class="docs-inner">
+        <h2 id="docs-title">CLI options</h2>
+        <div class="usage"><code>vinny serve [options]</code></div>
+
+        <dl class="options">
+          <div>
+            <dt><code>--listen &lt;ip&gt;</code></dt>
+            <dd>Loopback or Tailscale address <span>127.0.0.1</span></dd>
+          </div>
+          <div>
+            <dt><code>--port &lt;port&gt;</code></dt>
+            <dd>VNC port from 1 to 65535 <span>5900</span></dd>
+          </div>
+          <div>
+            <dt><code>--display &lt;index&gt;</code></dt>
+            <dd>Display to capture <span>0</span></dd>
+          </div>
+          <div>
+            <dt><code>--max-width &lt;pixels&gt;</code></dt>
+            <dd>Downscale wider displays <span>1920</span></dd>
+          </div>
+          <div>
+            <dt><code>--fps &lt;fps&gt;</code></dt>
+            <dd>Capture rate from 1 to 60 <span>20</span></dd>
+          </div>
+          <div>
+            <dt><code>--no-request</code></dt>
+            <dd>Check permissions without prompting</dd>
+          </div>
+          <div>
+            <dt><code>--parent-stdio</code></dt>
+            <dd>Stop when the parent process closes stdin</dd>
+          </div>
+        </dl>
+      </div>
+    </section>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

@@ -1,0 +1,16 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "vinny-vnc",
+  "account_id": "f7df7fafe5b4e9d4e0446100575c0bf4",
+  "compatibility_date": "2026-08-31",
+  "assets": {
+    "directory": "./dist",
+    "not_found_handling": "single-page-application"
+  },
+  "routes": [
+    {
+      "pattern": "vinny.lil.run",
+      "custom_domain": true
+    }
+  ]
+}

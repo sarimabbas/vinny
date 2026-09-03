@@ -1,0 +1,294 @@
+@font-face {
+  font-family: "Kinder Child";
+  src: url("/fonts/kinder-child-kawaii-bubble.otf") format("opentype");
+  font-display: swap;
+  font-style: normal;
+  font-weight: 400;
+}
+
+@font-face {
+  font-family: "Maple Mono";
+  src: url("/fonts/maple-mono-regular.ttf") format("truetype");
+  font-display: swap;
+  font-style: normal;
+  font-weight: 400;
+}
+
+:root {
+  color: #171719;
+  background: #f4f2ec;
+  font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  font-synthesis: none;
+  --paper: #f4f2ec;
+  --ink: #171719;
+  --line: rgba(23, 23, 25, 0.18);
+  --blue: #3e9fff;
+  --sun: #f3c85c;
+  --space-2: 16px;
+  --space-3: 24px;
+  --space-4: 32px;
+  --space-6: 48px;
+  --space-8: 64px;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; min-width: 320px; min-height: 100%; }
+body { background: var(--paper); }
+a { color: inherit; text-decoration: none; }
+
+main {
+  position: relative;
+  width: min(1120px, 100%);
+  height: 95svh;
+  min-height: 640px;
+  margin: 0 auto;
+  padding: clamp(40px, 4vw, 56px) clamp(24px, 4.5vw, 72px) var(--space-6);
+  display: grid;
+  grid-template-rows: auto 1fr;
+}
+
+.nameplate {
+  text-align: center;
+}
+
+.nameplate h1 {
+  margin: 0;
+  font-family: "Kinder Child", "Helvetica Neue", sans-serif;
+  font-size: clamp(92px, 10vw, 148px);
+  line-height: 0.72;
+  letter-spacing: -0.02em;
+  font-weight: 400;
+}
+
+.nameplate p {
+  margin: var(--space-3) 0 0;
+  color: #55534f;
+  font-family: "Kinder Child", "Helvetica Neue", sans-serif;
+  font-size: clamp(22px, 2.4vw, 30px);
+  line-height: 1;
+  letter-spacing: 0.01em;
+}
+
+.demo {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  place-items: start center;
+  padding-top: var(--space-3);
+}
+
+.terminal-scene {
+  position: relative;
+  width: min(620px, 100%);
+  padding-top: 202px;
+}
+
+.terminal {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  margin: 0;
+  overflow: hidden;
+  border: 0;
+  border-radius: 24px;
+  background: #1d1e23;
+  color: #f7f5ef;
+  box-shadow: 12px 12px 0 var(--sun);
+}
+
+.terminal-bar {
+  height: 48px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 var(--space-3);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.09);
+  color: #98999f;
+  font: 11px "Maple Mono", ui-monospace, monospace;
+}
+
+.terminal-bar i {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #ff655c;
+}
+.terminal-bar i:nth-child(2) { background: #f7c84f; }
+.terminal-bar i:nth-child(3) { background: #64d58a; }
+.terminal-bar span { margin-left: 8px; }
+
+pre {
+  margin: 0;
+  padding: var(--space-4);
+  overflow: hidden;
+  font: 15px/1.9 "Maple Mono", ui-monospace, monospace;
+}
+pre b { color: #ff6b5f; font-weight: 400; }
+pre em { color: #64de8e; font-style: normal; }
+
+.playground {
+  position: absolute;
+  z-index: 2;
+  inset: 0 0 auto;
+  width: 100%;
+  height: 220px;
+  min-width: 0;
+  overflow: hidden;
+  cursor: pointer;
+  touch-action: none;
+}
+.playground:focus-visible { outline: 2px solid var(--blue); outline-offset: 3px; }
+
+#vinny-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  opacity: 0;
+  transition: opacity 220ms ease;
+}
+.playground.is-ready #vinny-canvas { opacity: 1; }
+
+.github {
+  width: fit-content;
+  min-height: 46px;
+  margin: var(--space-8) auto 0;
+  padding: 0 19px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  border: 1px solid #1f2328;
+  border-radius: 12px;
+  background: #1f2328;
+  color: #fff;
+  box-shadow: 0 2px 0 rgba(23, 23, 25, 0.18);
+  font: 600 14px/1 "Helvetica Neue", Helvetica, Arial, sans-serif;
+  transition: transform 150ms ease, background 150ms ease, box-shadow 150ms ease;
+}
+.github svg { width: 19px; height: 19px; fill: currentColor; }
+.github:hover { background: #32383f; transform: translateY(-1px); box-shadow: 0 4px 0 rgba(23, 23, 25, 0.14); }
+.github:active { transform: translateY(0); box-shadow: 0 2px 0 rgba(23, 23, 25, 0.18); }
+.github:focus-visible { outline: 2px solid var(--blue); outline-offset: 3px; }
+
+.docs {
+  border-top: 1px solid var(--line);
+  background: #fffdf8;
+}
+
+.docs-inner {
+  width: min(760px, calc(100% - 48px));
+  margin: 0 auto;
+  padding: 80px 0 96px;
+  font-family: "Maple Mono", ui-monospace, monospace;
+}
+
+.docs h2 {
+  margin: 0 0 var(--space-4);
+  font-family: "Kinder Child", "Helvetica Neue", sans-serif;
+  font-size: clamp(42px, 5vw, 58px);
+  font-weight: 400;
+  line-height: 0.95;
+}
+
+.usage {
+  margin-bottom: var(--space-4);
+  padding: 18px 20px;
+  border-radius: 12px;
+  background: #1d1e23;
+  color: #f7f5ef;
+  font: 14px "Maple Mono", ui-monospace, monospace;
+}
+
+.options {
+  margin: 0;
+  border-top: 1px solid var(--line);
+}
+
+.options > div {
+  display: grid;
+  grid-template-columns: 210px 1fr;
+  gap: var(--space-3);
+  padding: 18px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.options dt,
+.options dd {
+  margin: 0;
+}
+
+.options dt {
+  color: var(--ink);
+  font: 13px "Maple Mono", ui-monospace, monospace;
+}
+
+.options dd {
+  color: #55534f;
+  font-family: "Maple Mono", ui-monospace, monospace;
+  font-size: 15px;
+  line-height: 1.45;
+}
+
+.options dd span {
+  float: right;
+  color: #8a8781;
+  font: 12px "Maple Mono", ui-monospace, monospace;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #vinny-canvas { transition: opacity 160ms ease; }
+}
+
+@media (max-width: 760px) {
+  main {
+    height: 95svh;
+    min-height: 640px;
+    padding: var(--space-6) 22px var(--space-6);
+  }
+
+  .nameplate { text-align: center; }
+  .nameplate h1 { font-size: 86px; }
+  .nameplate p { margin-top: var(--space-2); }
+
+  .demo {
+    align-items: start;
+    padding-top: var(--space-3);
+  }
+
+  .terminal-scene {
+    width: 100%;
+    padding-top: 178px;
+  }
+
+  .playground {
+    height: 196px;
+  }
+
+  .terminal {
+    border-radius: 22px;
+    box-shadow: 10px 10px 0 var(--sun);
+  }
+
+  .github { margin-top: var(--space-6); }
+
+  pre {
+    padding: var(--space-3);
+    font-size: clamp(11px, 3.4vw, 14px);
+  }
+
+  .docs-inner {
+    width: min(100% - 44px, 760px);
+    padding: 64px 0 72px;
+  }
+
+  .options > div {
+    grid-template-columns: 1fr;
+    gap: 7px;
+    padding: 16px 0;
+  }
+
+  .options dd span { float: right; }
+}

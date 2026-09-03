@@ -1,0 +1,8 @@
+node_modules/
+dist/
+.hatch-pet/
+.rive-analysis/
+scripts/
+
+public/assets/*
+!public/assets/vinny-spritesheet.webp
