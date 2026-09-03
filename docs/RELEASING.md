@@ -23,7 +23,7 @@ Vinny releases are built, signed, notarized, published, and added to Homebrew by
 6. In GitHub, open **Actions → Release → Run workflow**, select `main`, and enter the version without `v`, such as `0.2.0`.
 7. Wait for the unprivileged `build` job to pass, then approve the protected `release` environment deployment.
 8. Confirm that signing, notarization, and GitHub publishing succeed.
-9. Follow the workflow summary link to open the generated Homebrew tap branch as a pull request. Review and merge it to publish the cask update.
+9. Follow the workflow summary link to open the generated Homebrew tap branch as a pull request. Review and merge it to publish the cask update; GitHub deletes the branch automatically after merge.
 
 Equivalent command-line trigger:
 
