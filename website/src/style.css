@@ -124,6 +124,7 @@ pre {
   overflow: hidden;
   font: 15px/1.9 "Maple Mono", ui-monospace, monospace;
 }
+pre code { font: inherit; }
 pre b { color: #ff6b5f; font-weight: 400; }
 pre em { color: #64de8e; font-style: normal; }
 
@@ -174,15 +175,28 @@ pre em { color: #64de8e; font-style: normal; }
 .github:focus-visible { outline: 2px solid var(--blue); outline-offset: 3px; }
 
 .docs {
+  position: relative;
+  overflow: hidden;
   border-top: 1px solid var(--line);
-  background: #fffdf8;
+  background: #fff;
 }
 
 .docs-inner {
   width: min(760px, calc(100% - 48px));
   margin: 0 auto;
-  padding: 80px 0 96px;
+  padding: 80px 0 clamp(404px, calc(30vw + 64px), 504px);
   font-family: "Maple Mono", ui-monospace, monospace;
+}
+
+.docs-art {
+  position: absolute;
+  right: clamp(24px, 4vw, 64px);
+  bottom: 40px;
+  width: clamp(280px, 30vw, 440px);
+  height: auto;
+  display: block;
+  pointer-events: none;
+  user-select: none;
 }
 
 .docs h2 {
@@ -192,6 +206,8 @@ pre em { color: #64de8e; font-style: normal; }
   font-weight: 400;
   line-height: 0.95;
 }
+
+.docs code { font: inherit; }
 
 .usage {
   margin-bottom: var(--space-4);
@@ -281,7 +297,13 @@ pre em { color: #64de8e; font-style: normal; }
 
   .docs-inner {
     width: min(100% - 44px, 760px);
-    padding: 64px 0 72px;
+    padding: 64px 0 404px;
+  }
+
+  .docs-art {
+    right: 22px;
+    bottom: 28px;
+    width: min(360px, 82vw);
   }
 
   .options > div {

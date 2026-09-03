@@ -6,3 +6,5 @@ scripts/
 
 public/assets/*
 !public/assets/vinny-spritesheet.webp
+!public/assets/vinny-jump-white.png
+!public/assets/vinny-jump-world.png
