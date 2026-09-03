@@ -1,0 +1,135 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: macos-26
+    environment: release
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.90.0
+
+      - name: Verify tag and project versions
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#v}"
+          cargo_version="$(cargo metadata --no-deps --format-version 1 | python3 -c 'import json,sys; print(json.load(sys.stdin)["packages"][0]["version"])')"
+          plist_version="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' Info.plist)"
+          [[ "$version" == "$cargo_version" ]]
+          [[ "$version" == "$plist_version" ]]
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+
+      - name: Test
+        run: |
+          cargo fmt --check
+          cargo test --locked
+          cargo clippy --locked --all-targets -- -D warnings
+
+      - name: Import Developer ID certificate
+        env:
+          MACOS_CERTIFICATE_P12: ${{ secrets.MACOS_CERTIFICATE_P12 }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          certificate="$RUNNER_TEMP/developer-id.p12"
+          keychain="$RUNNER_TEMP/vinny-signing.keychain-db"
+          keychain_password="$(openssl rand -hex 24)"
+
+          printf '%s' "$MACOS_CERTIFICATE_P12" | base64 -D > "$certificate"
+          security create-keychain -p "$keychain_password" "$keychain"
+          security set-keychain-settings -lut 3600 "$keychain"
+          security unlock-keychain -p "$keychain_password" "$keychain"
+          security import "$certificate" -k "$keychain" -P "$MACOS_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$keychain_password" "$keychain"
+          security list-keychains -d user -s "$keychain" login.keychain-db
+
+          identity="$(security find-identity -v -p codesigning "$keychain" | sed -n 's/.*"\(Developer ID Application:.*\)"/\1/p' | head -1)"
+          [[ -n "$identity" ]]
+          echo "SIGN_IDENTITY=$identity" >> "$GITHUB_ENV"
+          echo "SIGNING_KEYCHAIN=$keychain" >> "$GITHUB_ENV"
+
+      - name: Prepare App Store Connect key
+        env:
+          APPLE_API_PRIVATE_KEY_P8: ${{ secrets.APPLE_API_PRIVATE_KEY_P8 }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          key="$RUNNER_TEMP/AuthKey_${APPLE_API_KEY_ID}.p8"
+          printf '%s' "$APPLE_API_PRIVATE_KEY_P8" | base64 -D > "$key"
+          chmod 600 "$key"
+          echo "NOTARY_KEY_PATH=$key" >> "$GITHUB_ENV"
+
+      - name: Sign and notarize
+        env:
+          NOTARY_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          NOTARY_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
+        run: ./scripts/release.sh
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            "dist/vinny-${VERSION}-macos-arm64.zip" \
+            --verify-tag \
+            --title "Vinny ${VERSION}" \
+            --generate-notes
+
+      - name: Update Homebrew cask
+        env:
+          HOMEBREW_TAP_DEPLOY_KEY: ${{ secrets.HOMEBREW_TAP_DEPLOY_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          key="$RUNNER_TEMP/homebrew-tap-deploy-key"
+          printf '%s' "$HOMEBREW_TAP_DEPLOY_KEY" > "$key"
+          chmod 600 "$key"
+          mkdir -p "$HOME/.ssh"
+          ssh-keyscan github.com >> "$HOME/.ssh/known_hosts"
+
+          GIT_SSH_COMMAND="ssh -i $key -o IdentitiesOnly=yes" \
+            git clone git@github.com:sarimabbas/homebrew-tap.git "$RUNNER_TEMP/homebrew-tap"
+
+          archive="dist/vinny-${VERSION}-macos-arm64.zip"
+          sha256="$(shasum -a 256 "$archive" | awk '{print $1}')"
+          cask="$RUNNER_TEMP/homebrew-tap/Casks/vinny.rb"
+          python3 - "$cask" "$VERSION" "$sha256" <<'PY'
+          import pathlib, re, sys
+          path, version, sha256 = pathlib.Path(sys.argv[1]), sys.argv[2], sys.argv[3]
+          text = path.read_text()
+          text = re.sub(r'^  version ".*"$', f'  version "{version}"', text, count=1, flags=re.MULTILINE)
+          text = re.sub(r'^  sha256 ".*"$', f'  sha256 "{sha256}"', text, count=1, flags=re.MULTILINE)
+          path.write_text(text)
+          PY
+
+          cd "$RUNNER_TEMP/homebrew-tap"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Casks/vinny.rb
+          git commit -m "chore(cask): update Vinny to ${VERSION}"
+          GIT_SSH_COMMAND="ssh -i $key -o IdentitiesOnly=yes" git push origin main
+
+      - name: Remove temporary credentials
+        if: always()
+        shell: bash
+        run: |
+          security delete-keychain "${SIGNING_KEYCHAIN:-$RUNNER_TEMP/vinny-signing.keychain-db}" 2>/dev/null || true
+          rm -f "$RUNNER_TEMP/developer-id.p12" "$RUNNER_TEMP"/AuthKey_*.p8 "$RUNNER_TEMP/homebrew-tap-deploy-key"

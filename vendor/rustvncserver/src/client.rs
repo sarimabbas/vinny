@@ -212,6 +212,23 @@ impl TightStreamCompressor for TightZlibStreams {
 /// It is responsible for sending framebuffer updates to the client based on dirty regions,
 /// processing incoming client messages (e.g., key events, pointer events, pixel format requests),
 /// and managing client-specific settings like preferred encodings and JPEG quality.
+fn default_wire_pixel_format() -> PixelFormat {
+    // Conventional RFB 32-bit true-colour format: pixel value 0x00RRGGBB,
+    // transmitted as B, G, R, padding on little-endian clients.
+    PixelFormat {
+        bits_per_pixel: 32,
+        depth: 24,
+        big_endian_flag: 0,
+        true_colour_flag: 1,
+        red_max: 255,
+        green_max: 255,
+        blue_max: 255,
+        red_shift: 16,
+        green_shift: 8,
+        blue_shift: 0,
+    }
+}
+
 pub struct VncClient {
     /// The read half of the TCP stream for receiving client messages.
     read_stream: tokio::net::tcp::OwnedReadHalf,
@@ -392,7 +409,7 @@ impl VncClient {
         let server_init = ServerInit {
             framebuffer_width: framebuffer.width(),
             framebuffer_height: framebuffer.height(),
-            pixel_format: PixelFormat::rgba32(),
+            pixel_format: default_wire_pixel_format(),
             name: desktop_name,
         };
 
@@ -411,7 +428,7 @@ impl VncClient {
             read_stream,
             write_stream: Arc::new(tokio::sync::Mutex::new(write_stream)),
             framebuffer,
-            pixel_format: RwLock::new(PixelFormat::rgba32()),
+            pixel_format: RwLock::new(default_wire_pixel_format()),
             encodings: RwLock::new(vec![ENCODING_RAW]),
             event_tx,
             last_update_sent: RwLock::new(creation_time),
@@ -1839,5 +1856,25 @@ impl Drop for VncClient {
             "VncClient {} is being dropped (read half will close now)",
             self.client_id
         );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn default_wire_format_encodes_red_as_bgrx() {
+        let wire_format = default_wire_pixel_format();
+        let encoded = translate::translate_pixels(
+            &[0xff, 0x00, 0x00, 0xff],
+            &PixelFormat::rgba32(),
+            &wire_format,
+        );
+
+        assert_eq!(&encoded[..], &[0x00, 0x00, 0xff, 0x00]);
+        assert_eq!(wire_format.red_shift, 16);
+        assert_eq!(wire_format.green_shift, 8);
+        assert_eq!(wire_format.blue_shift, 0);
     }
 }

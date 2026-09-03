@@ -1,0 +1,41 @@
+[package]
+name = "rfb-encodings"
+version = "0.1.7"
+edition = "2021"
+rust-version = "1.90"
+authors = ["Dustin McAfee"]
+license = "Apache-2.0"
+description = "RFB (Remote Framebuffer) protocol encoding implementations for VNC"
+repository = "https://github.com/dustinmcafee/rfb-encodings"
+keywords = ["vnc", "rfb", "encoding", "compression", "remote-desktop"]
+categories = ["network-programming", "encoding", "compression"]
+readme = "README.md"
+
+[dependencies]
+bytes = "1"
+flate2 = "1.0"          # Zlib compression for ZLIB, ZLIBHEX, ZRLE, ZYWRLE, Tight
+png = "0.17"            # PNG encoding for TightPng
+log = { version = "0.4", optional = true }  # Optional logging for encoding operations
+
+[features]
+default = []
+turbojpeg = []          # Enable TurboJPEG for Tight encoding (requires libjpeg-turbo)
+debug-logging = ["log"] # Enable verbose debug logging
+generate-golden = []    # Generate golden test outputs instead of comparing
+
+[[bin]]
+name = "generate_fixture"
+path = "src/bin/generate_fixture.rs"
+
+[dev-dependencies]
+env_logger = "0.11"
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+targets = ["x86_64-unknown-linux-gnu", "x86_64-apple-darwin", "x86_64-pc-windows-msvc", "aarch64-unknown-linux-gnu"]
+
+[profile.release]
+lto = true              # Link-time optimization
+codegen-units = 1       # Better optimization
+opt-level = 3           # Maximum optimization

@@ -13,7 +13,18 @@ submission="$(pwd)/dist/.vinny-notarization.zip"
 SIGN_IDENTITY="$identity" ./scripts/package.sh
 rm -f "$submission" "$archive"
 ditto -c -k --keepParent "$app" "$submission"
-xcrun notarytool submit "$submission" --keychain-profile "$profile" --wait
+if [[ -n "${NOTARY_KEY_PATH:-}" ]]; then
+  : "${NOTARY_KEY_ID:?set NOTARY_KEY_ID with NOTARY_KEY_PATH}"
+  : "${NOTARY_ISSUER_ID:?set NOTARY_ISSUER_ID with NOTARY_KEY_PATH}"
+  notary_credentials=(
+    --key "$NOTARY_KEY_PATH"
+    --key-id "$NOTARY_KEY_ID"
+    --issuer "$NOTARY_ISSUER_ID"
+  )
+else
+  notary_credentials=(--keychain-profile "$profile")
+fi
+xcrun notarytool submit "$submission" "${notary_credentials[@]}" --wait
 xcrun stapler staple "$app"
 xcrun stapler validate "$app"
 ditto -c -k --keepParent "$app" "$archive"
