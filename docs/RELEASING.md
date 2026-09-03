@@ -5,10 +5,13 @@ Vinny releases are built, signed, notarized, published, and added to Homebrew by
 ## Release flow
 
 1. Create a release branch from the latest `main`.
-2. Update the version in:
-   - `Cargo.toml`
-   - `Cargo.lock`
-   - `Info.plist` (`CFBundleShortVersionString` and `CFBundleVersion`)
+2. Update Cargo, the lockfile, and the app plist together:
+
+   ```bash
+   ./scripts/prepare-release.sh --version 0.2.0
+   ```
+
+   Use `--dry-run` first if desired. The script also increments `CFBundleVersion` and refuses to overwrite existing changes to version files.
 3. Update documentation for user-visible changes.
 4. Run:
 
