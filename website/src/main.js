@@ -42,6 +42,7 @@ class PetRuntime {
     this.transmission = { active: false, startedAt: 0, duration: 4200 };
     this.nextTransmissionAt = performance.now() + 9000;
     this.reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+    this.mobileLayout = window.matchMedia("(max-width: 760px)");
     this.image.addEventListener("load", () => {
       this.outlineImage.width = this.image.naturalWidth;
       this.outlineImage.height = this.image.naturalHeight;
@@ -73,7 +74,8 @@ class PetRuntime {
   }
 
   spriteSize(bounds) {
-    const height = Math.min(bounds.height * 0.72, bounds.width * 0.42, 168) * 0.7;
+    const scale = this.mobileLayout.matches ? 0.88 : 0.7;
+    const height = Math.min(bounds.height * 0.72, bounds.width * 0.42, 168) * scale;
     return { height, width: height * (CELL_WIDTH / CELL_HEIGHT) };
   }
 
