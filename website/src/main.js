@@ -442,3 +442,77 @@ playground.addEventListener("keydown", (event) => {
 });
 
 window.addEventListener("pagehide", () => resizeObserver.disconnect());
+
+const serverCard = document.querySelector("#server-card");
+const serverToggle = document.querySelector("#server-toggle");
+const serverStatus = document.querySelector(".server-status");
+const applyServer = document.querySelector("#apply-server");
+const pipPreview = document.querySelector("#pip-preview");
+const pipAddress = document.querySelector("#pip-address");
+const listenAddress = document.querySelector("#listen-address");
+const listenPort = document.querySelector("#listen-port");
+const fpsOutput = document.querySelector("#fps-output");
+let fps = 20;
+let serverTimer;
+
+function updatePreviewAddress() {
+  const address = listenAddress.value.trim() || "127.0.0.1";
+  const port = listenPort.value || "5900";
+  pipAddress.textContent = `${address}:${port}`;
+}
+
+function stopServerPreview() {
+  window.clearTimeout(serverTimer);
+  serverCard.classList.remove("is-starting", "is-live");
+  pipPreview.classList.remove("is-visible");
+  pipPreview.setAttribute("aria-hidden", "true");
+  serverStatus.textContent = "stopped";
+  applyServer.textContent = "Apply & restart";
+}
+
+function startServerPreview() {
+  window.clearTimeout(serverTimer);
+  updatePreviewAddress();
+  serverCard.classList.remove("is-live");
+  serverCard.classList.add("is-starting");
+  pipPreview.classList.remove("is-visible");
+  pipPreview.setAttribute("aria-hidden", "true");
+  serverStatus.textContent = "starting";
+  applyServer.textContent = "Starting…";
+
+  serverTimer = window.setTimeout(() => {
+    serverCard.classList.remove("is-starting");
+    serverCard.classList.add("is-live");
+    pipPreview.classList.add("is-visible");
+    pipPreview.setAttribute("aria-hidden", "false");
+    serverStatus.textContent = "listening";
+    applyServer.textContent = "Apply & restart";
+  }, 520);
+}
+
+serverToggle.addEventListener("change", () => {
+  if (serverToggle.checked) startServerPreview();
+  else stopServerPreview();
+});
+
+applyServer.addEventListener("click", () => {
+  if (!serverToggle.checked) {
+    serverToggle.checked = true;
+  }
+  startServerPreview();
+});
+
+document.querySelectorAll(".stepper button").forEach((button) => {
+  button.addEventListener("click", () => {
+    fps = Math.max(1, Math.min(60, fps + Number(button.dataset.step)));
+    fpsOutput.textContent = `${fps} FPS`;
+  });
+});
+
+listenAddress.addEventListener("input", updatePreviewAddress);
+listenPort.addEventListener("input", updatePreviewAddress);
+serverCard.addEventListener("submit", (event) => event.preventDefault());
+serverToggle.checked = false;
+stopServerPreview();
+updatePreviewAddress();
+window.addEventListener("pagehide", () => window.clearTimeout(serverTimer));
