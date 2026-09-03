@@ -61,7 +61,7 @@ class PetRuntime {
   }
 
   spriteSize(bounds) {
-    const height = Math.min(bounds.height * 0.72, bounds.width * 0.42, 168);
+    const height = Math.min(bounds.height * 0.72, bounds.width * 0.42, 168) * 0.7;
     return { height, width: height * (CELL_WIDTH / CELL_HEIGHT) };
   }
 
