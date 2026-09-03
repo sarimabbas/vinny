@@ -92,9 +92,9 @@ The smoke launches `Vinny.app`, verifies that port 5900 is loopback-only, comple
 
 All resolved Rust dependencies are permissively licensed; there are no GPL or AGPL dependencies.
 
-## Contributing and releases
+## Documentation
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for the development workflow, [docs/RELEASING.md](docs/RELEASING.md) for the protected release process, and [SECURITY.md](SECURITY.md) for private vulnerability reporting.
+Development, release, security, and design documentation is indexed in [`docs/`](docs/README.md).
 
 ## License
 

@@ -43,4 +43,4 @@ The smoke test requires Screen Recording and Accessibility permission for the pa
 4. Open a pull request. CI must pass before merge.
 5. Use a squash merge so `main` remains linear.
 
-Direct pushes, force pushes, and deletion of `main` are blocked. Maintainers release only from protected `main`; see [docs/RELEASING.md](docs/RELEASING.md).
+Direct pushes, force pushes, and deletion of `main` are blocked. Maintainers release only from protected `main`; see [RELEASING.md](RELEASING.md).
