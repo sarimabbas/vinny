@@ -3,7 +3,7 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 identity="${SIGN_IDENTITY:?set SIGN_IDENTITY to your Developer ID Application certificate}"
-profile="${NOTARY_PROFILE:-vinny-notary}"
+profile="${NOTARY_PROFILE:-developer-notary}"
 version="$(cargo metadata --no-deps --format-version 1 | python3 -c 'import json,sys; print(json.load(sys.stdin)["packages"][0]["version"])')"
 arch="$(uname -m)"
 app="$(pwd)/dist/Vinny.app"

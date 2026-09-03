@@ -21,6 +21,18 @@ Not yet implemented: VNC authentication, clipboard sync, and login-window contro
 > [!WARNING]
 > The RFB server currently has no built-in authentication or encryption. Vinny defaults to loopback. Use another listen address only on a trusted network, and never expose Vinny directly to the public internet.
 
+## Install
+
+Homebrew 6 and newer require explicit trust for third-party taps:
+
+```bash
+brew tap sarimabbas/tap
+brew trust --cask sarimabbas/tap/vinny
+brew install --cask vinny
+```
+
+Then open Vinny from Applications.
+
 ## Build
 
 Requires macOS 12.3+, Xcode, and Rust. The repository pins Rust 1.90 because `rustvncserver` requires it.
@@ -47,7 +59,7 @@ Create a Developer ID signed app:
 SIGN_IDENTITY='Developer ID Application: …' ./scripts/package.sh
 ```
 
-To sign, notarize, staple, and create a versioned release archive using credentials saved under the default `vinny-notary` keychain profile:
+To sign, notarize, staple, and create a versioned release archive using credentials saved under the default `developer-notary` keychain profile:
 
 ```bash
 SIGN_IDENTITY='Developer ID Application: …' ./scripts/release.sh
