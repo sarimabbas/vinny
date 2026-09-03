@@ -362,16 +362,22 @@ impl VncClient {
         #[cfg(feature = "debug-logging")]
         info!("Client version: {}", String::from_utf8_lossy(&version_buf));
 
-        // Send security types
-        if password.is_some() {
-            stream.write_all(&[1, SECURITY_TYPE_VNC_AUTH]).await?;
+        // Offer exactly one security type and reject any other selection.
+        let offered_security_type = if password.is_some() {
+            SECURITY_TYPE_VNC_AUTH
         } else {
-            stream.write_all(&[1, SECURITY_TYPE_NONE]).await?;
-        }
+            SECURITY_TYPE_NONE
+        };
+        stream.write_all(&[1, offered_security_type]).await?;
 
-        // Read client's security type choice
         let mut sec_type = [0u8; 1];
         stream.read_exact(&mut sec_type).await?;
+        if sec_type[0] != offered_security_type {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "client selected a security type that was not offered",
+            ));
+        }
 
         // Handle authentication
         if sec_type[0] == SECURITY_TYPE_VNC_AUTH {
@@ -1876,5 +1882,32 @@ mod tests {
         assert_eq!(wire_format.red_shift, 16);
         assert_eq!(wire_format.green_shift, 8);
         assert_eq!(wire_format.blue_shift, 0);
+    }
+
+    #[tokio::test]
+    async fn rejects_a_security_type_that_was_not_offered() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let client = tokio::spawn(async move {
+            let mut stream = TcpStream::connect(address).await.unwrap();
+            let mut version = [0; 12];
+            stream.read_exact(&mut version).await.unwrap();
+            stream.write_all(&version).await.unwrap();
+            let mut offered = [0; 2];
+            stream.read_exact(&mut offered).await.unwrap();
+            assert_eq!(offered, [1, SECURITY_TYPE_NONE]);
+            stream.write_all(&[SECURITY_TYPE_VNC_AUTH]).await.unwrap();
+        });
+        let (stream, _) = listener.accept().await.unwrap();
+        let framebuffer = Framebuffer::new(1, 1);
+        let (event_tx, _event_rx) = mpsc::unbounded_channel();
+
+        let error = VncClient::new(1, stream, framebuffer, "test".into(), None, event_tx)
+            .await
+            .err()
+            .expect("unoffered security type should fail");
+        client.await.unwrap();
+
+        assert_eq!(error.kind(), std::io::ErrorKind::InvalidData);
     }
 }
