@@ -165,7 +165,7 @@ pre em { color: #64de8e; font-style: normal; }
   background: #1f2328;
   color: #fff;
   box-shadow: 0 2px 0 rgba(23, 23, 25, 0.18);
-  font: 600 14px/1 "Helvetica Neue", Helvetica, Arial, sans-serif;
+  font: 14px/1 "Maple Mono", ui-monospace, monospace;
   transition: transform 150ms ease, background 150ms ease, box-shadow 150ms ease;
 }
 .github svg { width: 19px; height: 19px; fill: currentColor; }
