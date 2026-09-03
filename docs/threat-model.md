@@ -64,7 +64,7 @@ flowchart LR
 |---|---|---|
 | Screen frames | May expose credentials, messages, documents, and personal data | C, I |
 | Keyboard and pointer control | Enables actions with the logged-in user's authority | I, A |
-| Developer ID private key and password | Can sign software as Fuzzy Foundry, LLC | C, I |
+| Developer ID private key and password | Can sign software as Vinny's registered developer | C, I |
 | App Store Connect API private key | Can submit software for notarization within its role | C, I |
 | Homebrew tap deploy key | Can prepare changes anywhere in a multi-package tap | C, I |
 | Release tags, ZIPs, checksums, and cask | Determine what users install as Vinny | I, A |
@@ -134,7 +134,7 @@ flowchart LR
 - **Critical:** readily exploitable compromise at default settings or unrecoverable signing-key theft affecting all users. Examples: remote pre-auth code execution on loopback through a browser-accessible path; public disclosure of the Developer ID private key; automatic malicious cask merge without review.
 - **High:** serious compromise requiring an explicit exposure choice or maintainer/account compromise. Examples: unauthenticated screen/input access on a reachable listener; plaintext RFB interception; connection-flood denial of service; signed-malware publication after admin compromise.
 - **Medium:** meaningful supply-chain or security failure with additional controls/preconditions. Examples: a stolen tap key staging but not merging a change; future authentication negotiation bypass; compromised dependency surviving release review.
-- **Low:** limited impact or no plausible privileged path. Examples: consuming fork CI minutes; disclosure of bundle IDs, Team IDs, account IDs, public SSH host keys, or secret names; attacks against the static website without an input sink.
+- **Low:** limited impact or no plausible privileged path. Examples: consuming fork CI minutes; disclosure of public application metadata, public SSH host keys, or secret names; attacks against the static website without an input sink.
 
 The largest ranking variable is listener reachability. TM-001 through TM-003 move toward critical operational risk when a user exposes Vinny directly to the Internet; they are substantially reduced when Vinny stays on loopback behind an authenticated tunnel.
 
