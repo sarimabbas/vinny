@@ -30,6 +30,7 @@ struct ServerConfig {
     sharing_policy: SharingPolicy,
     view_only: bool,
     password: Option<String>,
+    legacy_auth: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -46,6 +47,8 @@ struct ServerRequest {
     view_only: bool,
     #[serde(default)]
     password: Option<String>,
+    #[serde(default)]
+    legacy_auth: bool,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -246,6 +249,13 @@ fn server_config(request: ServerRequest) -> Result<ServerConfig, String> {
     if !(320..=7680).contains(&request.max_width) {
         return Err("maximum width must be between 320 and 7680".into());
     }
+    let password = request.password.filter(|password| !password.is_empty());
+    if request.legacy_auth && password.is_none() {
+        return Err("legacy VNC authentication requires a password".into());
+    }
+    if request.legacy_auth && password.as_ref().is_some_and(|password| password.len() > 8) {
+        return Err("legacy VNC passwords must contain 1 to 8 bytes".into());
+    }
     Ok(ServerConfig {
         listen,
         port: request.port,
@@ -254,7 +264,8 @@ fn server_config(request: ServerRequest) -> Result<ServerConfig, String> {
         fps: request.fps,
         sharing_policy: request.sharing_policy.into(),
         view_only: request.view_only,
-        password: request.password.filter(|password| !password.is_empty()),
+        password,
+        legacy_auth: request.legacy_auth,
     })
 }
 
@@ -280,11 +291,12 @@ async fn serve(
     )
     .map_err(|error| format!("could not start capture: {error}"))?;
     let mut geometry = capture.geometry;
-    let (server, events) = VncServer::new_with_policy(
+    let (server, events) = VncServer::new_with_policy_and_legacy_auth(
         geometry.capture_width,
         geometry.capture_height,
         format!("Vinny Display {}", config.display + 1),
         config.password,
+        config.legacy_auth,
         config.sharing_policy,
         config.view_only,
     );
@@ -384,6 +396,7 @@ mod tests {
             sharing_policy: SharingPolicyRequest::FollowClient,
             view_only: false,
             password: None,
+            legacy_auth: false,
         }
     }
 
@@ -396,5 +409,15 @@ mod tests {
         assert!(server_config(request("not-an-address", 5900, 20)).is_err());
         assert!(server_config(request("127.0.0.1", 0, 20)).is_err());
         assert!(server_config(request("127.0.0.1", 5900, 0)).is_err());
+
+        let mut legacy = request("127.0.0.1", 5900, 20);
+        legacy.password = Some("12345678".into());
+        legacy.legacy_auth = true;
+        assert!(server_config(legacy).is_ok());
+
+        let mut too_long = request("127.0.0.1", 5900, 20);
+        too_long.password = Some("123456789".into());
+        too_long.legacy_auth = true;
+        assert!(server_config(too_long).is_err());
     }
 }

@@ -255,6 +255,9 @@ pub const SECURITY_TYPE_INVALID: u8 = 0;
 /// to the initialization phase.
 pub const SECURITY_TYPE_NONE: u8 = 1;
 
+/// Security type: legacy VNC challenge-response authentication.
+pub const SECURITY_TYPE_VNC_AUTH: u8 = 2;
+
 /// Security type: `VeNCrypt` 0.2 negotiation.
 pub const SECURITY_TYPE_VENCRYPT: u8 = 19;
 

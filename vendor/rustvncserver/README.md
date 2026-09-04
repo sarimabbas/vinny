@@ -53,6 +53,7 @@ A pure Rust VNC (Virtual Network Computing) server library with complete RFB pro
 - ✅ **11 Encodings** - All major VNC encodings supported
 - ✅ **All Pixel Formats** - 8/16/24/32-bit color depths
 - ✅ **Secure transport** - VeNCrypt/X.509 TLS with password authentication
+- ✅ **Legacy authentication** - Optional VNC password support for RFB 3.3 clients
 - ✅ **Extensions** - Cursor, clipboard, resize, Fence, ContinuousUpdates, and QEMU key events
 - ✅ **Reverse Connections** - Connect to listening viewers
 - ✅ **Repeater Support** - UltraVNC Mode-2 repeaters

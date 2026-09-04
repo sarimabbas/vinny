@@ -156,8 +156,17 @@
 
                   <label class="setting-row" id="password-row" hidden>
                     <span>Password</span>
-                    <input type="password" placeholder="Required" autocomplete="new-password" />
+                    <input id="server-password" type="password" placeholder="Required" autocomplete="new-password" />
                   </label>
+
+                  <div class="setting-row" id="legacy-auth-row" hidden>
+                    <span>Compatibility</span>
+                    <label class="check-control">
+                      <input id="legacy-auth" type="checkbox" />
+                      <span>Legacy authentication (unencrypted)</span>
+                    </label>
+                  </div>
+
 
                   <div class="setting-row">
                     <span>Listen on</span>

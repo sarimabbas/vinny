@@ -4,7 +4,7 @@
 
 - Use [GitHub Discussions](https://github.com/sarimabbas/vinny/discussions) for usage questions.
 - Report security vulnerabilities privately as described in [SECURITY.md](SECURITY.md).
-- Security reports should distinguish the default plaintext loopback mode from the optional VeNCrypt/X.509 TLS mode.
+- Security reports should identify whether the listener used unauthenticated, legacy VNC, or VeNCrypt/X.509 TLS security.
 
 ## Development
 
