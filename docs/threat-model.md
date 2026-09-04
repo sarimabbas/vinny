@@ -36,7 +36,7 @@ Pull-request jobs cannot access release credentials. A maintainer starts a relea
 | Unauthenticated viewing or input | An untrusted device can reach a plaintext listener | Keep it on loopback or a trusted network. Otherwise use encrypted mode or a secure tunnel. |
 | Legacy VNC traffic interception | Legacy authentication is enabled on a network an attacker can observe or modify | Keep the listener on a trusted network or use a secure tunnel. Disable legacy authentication when it is not needed. |
 | Server impersonation | A viewer accepts a changed self-signed certificate on a hostile network | Check the certificate prompt or use a trusted tunnel. |
-| Password guessing or resource exhaustion | An encrypted listener is reachable from an untrusted network | Use a strong password. Vinny delays failures and limits clients. |
+| Password guessing or resource exhaustion | A password-protected listener is reachable from an untrusted network | Use a strong password. Vinny delays failures and limits clients. |
 | Release compromise | The maintainer account or approval session is compromised | Keep branch protection, account security, manual approval, and cask review enabled. |
 
 ## Relevant code
