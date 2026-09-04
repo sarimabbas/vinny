@@ -18,7 +18,7 @@ Existing controls:
 - optional VeNCrypt/X.509 TLS with password authentication;
 - view-only and viewer-sharing policies;
 - strict security-type negotiation and bounded protocol fields;
-- a 10-second handshake timeout and at most eight clients per server.
+- a 10-second handshake timeout, a one-second failed-password delay, and at most eight clients per server.
 
 ### TLS identity
 
@@ -34,7 +34,7 @@ Pull-request CI has no signing credentials. Releases are manually started from p
 |---|---|---|
 | Unauthenticated screen or input access | A plaintext listener is reachable by an untrusted device | Keep plaintext listeners on loopback or a trusted network; otherwise enable encrypted mode or use a secure tunnel. |
 | Server impersonation | A viewer accepts a changed self-signed certificate on a hostile network | Verify certificate prompts or use a trusted tunnel. A persistent certificate can be added if direct hostile-network use becomes important. |
-| Password or resource abuse | An encrypted listener is publicly reachable | Direct public-Internet exposure is unsupported. Authentication backoff or additional rate limits can be added if real-world exposure warrants them. |
+| Password or resource abuse | An encrypted listener is publicly reachable | Failed passwords are delayed and concurrent clients are bounded. Stronger rate limits can be added if real-world exposure warrants them. |
 | Release compromise | The maintainer account and release approval session are compromised | Preserve branch protection, hardware-backed account security, manual release approval, and cask review. |
 
 The first three risks are low under the default loopback deployment and increase when a listener is exposed beyond a trusted network.

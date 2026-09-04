@@ -85,6 +85,7 @@
 
               <div class="server-heading">
                 <h4>Servers</h4>
+                <button class="add-button" type="button">Add server</button>
               </div>
 
               <form class="server-card" id="server-card">
@@ -99,38 +100,79 @@
                   </label>
                 </div>
 
-                <label class="setting-row">
-                  <span>Display</span>
-                  <select id="display-select">
-                    <option>Display 1 (Built-in Retina Display)</option>
-                    <option>Display 2 (Studio Display)</option>
-                  </select>
-                </label>
+                <div class="settings-list">
+                  <label class="setting-row">
+                    <span>Display</span>
+                    <select id="display-select">
+                      <option>Display 1 (Built-in Retina Display)</option>
+                      <option>Display 2 (Studio Display)</option>
+                    </select>
+                  </label>
 
-                <label class="setting-row">
-                  <span>Maximum width</span>
-                  <input type="number" value="1920" min="320" max="7680" />
-                </label>
+                  <label class="setting-row">
+                    <span>Maximum width</span>
+                    <input type="number" value="1920" min="320" max="7680" />
+                  </label>
 
-                <div class="setting-row">
-                  <span>Frame rate</span>
-                  <div class="stepper">
-                    <button type="button" data-step="-1" aria-label="Decrease frame rate">−</button>
-                    <output id="fps-output">20 FPS</output>
-                    <button type="button" data-step="1" aria-label="Increase frame rate">+</button>
+                  <div class="setting-row">
+                    <span>Frame rate</span>
+                    <div class="stepper">
+                      <button type="button" data-step="-1" aria-label="Decrease frame rate">−</button>
+                      <output id="fps-output">20 FPS</output>
+                      <button type="button" data-step="1" aria-label="Increase frame rate">+</button>
+                    </div>
                   </div>
-                </div>
 
-                <div class="setting-row">
-                  <span>Listen on</span>
-                  <div class="listen-fields">
-                    <input id="listen-address" value="127.0.0.1" aria-label="Listen address" />
-                    <span>:</span>
-                    <input id="listen-port" type="number" value="5900" min="1" max="65535" aria-label="Port" />
+                  <label class="setting-row setting-row-detail">
+                    <span>Viewers</span>
+                    <span class="setting-control">
+                      <select id="viewer-policy">
+                        <option value="follow-client">Viewer decides</option>
+                        <option value="always-shared">Allow multiple viewers</option>
+                        <option value="single-client">One viewer at a time</option>
+                      </select>
+                      <small id="viewer-help">A viewer can share the session or request exclusive access.</small>
+                    </span>
+                  </label>
+
+                  <div class="setting-row setting-row-detail">
+                    <span>Remote control</span>
+                    <span class="setting-control">
+                      <label class="check-control">
+                        <input type="checkbox" checked />
+                        <span>Allow keyboard and mouse</span>
+                      </label>
+                      <small>Off blocks keyboard, mouse, and incoming clipboard changes.</small>
+                    </span>
                   </div>
+
+                  <div class="setting-row">
+                    <span>Security</span>
+                    <label class="check-control">
+                      <input id="secure-server" type="checkbox" />
+                      <span>Encrypted + password</span>
+                    </label>
+                  </div>
+
+                  <label class="setting-row" id="password-row" hidden>
+                    <span>Password</span>
+                    <input type="password" placeholder="Required" autocomplete="new-password" />
+                  </label>
+
+                  <div class="setting-row">
+                    <span>Listen on</span>
+                    <div class="listen-fields">
+                      <input id="listen-address" value="127.0.0.1" aria-label="Listen address" />
+                      <span>:</span>
+                      <input id="listen-port" type="number" value="5900" min="1" max="65535" aria-label="Port" />
+                    </div>
+                  </div>
+
+                  <p class="listener-warning" id="listener-warning" hidden>This listener is unauthenticated and plaintext. Use only trusted networks or a secure tunnel.</p>
                 </div>
 
                 <div class="server-actions">
+                  <button class="remove-button" type="button">Remove</button>
                   <button class="apply-button" id="apply-server" type="button">Apply &amp; restart</button>
                 </div>
               </form>

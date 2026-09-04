@@ -72,6 +72,11 @@ use crate::protocol::{
 };
 use rfb_encodings::translate;
 
+#[cfg(not(test))]
+const AUTH_FAILURE_DELAY: Duration = Duration::from_secs(1);
+#[cfg(test)]
+const AUTH_FAILURE_DELAY: Duration = Duration::from_millis(20);
+
 /// Represents various events that a VNC client can send to the server.
 /// These events typically correspond to user interactions like keyboard input,
 /// pointer movements, or clipboard updates.
@@ -275,6 +280,13 @@ impl TightStreamCompressor for TightZlibStreams {
 /// It is responsible for sending framebuffer updates to the client based on dirty regions,
 /// processing incoming client messages (e.g., key events, pointer events, pixel format requests),
 /// and managing client-specific settings like preferred encodings and JPEG quality.
+async fn throttle_failed_authentication(authenticated: bool) {
+    if !authenticated {
+        // A fixed delay plus the client ceiling throttles guesses without lockout state.
+        tokio::time::sleep(AUTH_FAILURE_DELAY).await;
+    }
+}
+
 fn constant_time_eq(expected: &[u8], supplied: &[u8]) -> bool {
     if expected.len() != supplied.len() {
         return false;
@@ -568,6 +580,7 @@ impl VncClient {
                 tls_stream.read_exact(&mut username).await?;
                 tls_stream.read_exact(&mut supplied_password).await?;
                 let authenticated = constant_time_eq(password.as_bytes(), &supplied_password);
+                throttle_failed_authentication(authenticated).await;
                 tls_stream
                     .write_all(
                         &(if authenticated {
@@ -808,7 +821,7 @@ impl VncClient {
                                 // Accept the format and store it for translation during encoding
                                 *self.pixel_format.write().await = requested_format.clone();
                                 if self.supports_cursor.load(Ordering::Relaxed) {
-                                    self.send_default_cursor().await?;
+                                    self.hide_client_cursor().await?;
                                 }
 
                                 #[cfg(feature = "debug-logging")]
@@ -863,7 +876,7 @@ impl VncClient {
                                     if encoding == ENCODING_CURSOR
                                         && !self.supports_cursor.swap(true, Ordering::Relaxed)
                                     {
-                                        self.send_default_cursor().await?;
+                                        self.hide_client_cursor().await?;
                                     }
                                     if encoding == ENCODING_LAST_RECT {
                                         self.supports_last_rect.store(true, Ordering::Relaxed);
@@ -1269,28 +1282,11 @@ impl VncClient {
         .await
     }
 
-    async fn send_default_cursor(&self) -> Result<(), std::io::Error> {
-        const WIDTH: u16 = 16;
-        const HEIGHT: u16 = 16;
-        let width = usize::from(WIDTH);
-        let height = usize::from(HEIGHT);
-        let mut rgba = vec![0u8; width * height * 4];
-        let mut mask = vec![0u8; width.div_ceil(8) * height];
-        for y in 0..height {
-            for x in 0..width {
-                let visible =
-                    (y <= 11 && x <= y / 2) || ((8..=14).contains(&y) && (4..=6).contains(&x));
-                if visible {
-                    let offset = (y * width + x) * 4;
-                    rgba[offset..offset + 4].copy_from_slice(&[255, 255, 255, 255]);
-                    mask[y * width.div_ceil(8) + x / 8] |= 0x80 >> (x % 8);
-                }
-            }
-        }
+    async fn hide_client_cursor(&self) -> Result<(), std::io::Error> {
         let format = self.pixel_format.read().await;
-        let mut data = translate::translate_pixels(&rgba, &PixelFormat::rgba32(), &format);
-        data.extend_from_slice(&mask);
-        self.send_pseudo_rect(ENCODING_CURSOR, 0, 0, WIDTH, HEIGHT, &data)
+        let mut data = translate::translate_pixels(&[0, 0, 0, 0], &PixelFormat::rgba32(), &format);
+        data.put_u8(0); // A zero mask makes this 1×1 cursor fully transparent.
+        self.send_pseudo_rect(ENCODING_CURSOR, 0, 0, 1, 1, &data)
             .await
     }
 
@@ -2490,6 +2486,17 @@ mod tests {
         assert_eq!(wire_format.blue_shift, 0);
     }
 
+    #[tokio::test]
+    async fn failed_authentication_is_throttled() {
+        let started = Instant::now();
+        throttle_failed_authentication(false).await;
+        assert!(started.elapsed() >= AUTH_FAILURE_DELAY);
+
+        let started = Instant::now();
+        throttle_failed_authentication(true).await;
+        assert!(started.elapsed() < AUTH_FAILURE_DELAY);
+    }
+
     async fn connect_with_version(
         version: &[u8; 12],
     ) -> (VncClient, TcpStream, mpsc::UnboundedReceiver<ClientEvent>) {
@@ -2609,6 +2616,25 @@ mod tests {
             } => assert!(down && keysym == 0x61 && keycode == 0x1e),
             _ => panic!("expected extended key event"),
         }
+        task.abort();
+    }
+
+    #[tokio::test]
+    async fn cursor_capable_viewers_receive_a_hidden_local_cursor() {
+        let (mut client, mut peer, _events) = connect_with_version(PROTOCOL_VERSION_3_8).await;
+        let task = tokio::spawn(async move { client.handle_messages().await });
+
+        peer.write_all(&set_encoding(ENCODING_CURSOR))
+            .await
+            .unwrap();
+        let mut update = [0u8; 21];
+        peer.read_exact(&mut update).await.unwrap();
+        assert_eq!(&update[8..12], &[0, 1, 0, 1]);
+        assert_eq!(
+            i32::from_be_bytes(update[12..16].try_into().unwrap()),
+            ENCODING_CURSOR
+        );
+        assert!(update[16..].iter().all(|byte| *byte == 0));
         task.abort();
     }
 
