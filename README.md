@@ -9,7 +9,7 @@ Vinny is a menu-bar app. Open it, grant Screen Recording and Accessibility once,
 
 ## Install
 
-Use the fully qualified cask name so Homebrew trusts only the Vinny cask:
+Install with Homebrew:
 
 ```bash
 brew install --cask sarimabbas/tap/vinny
@@ -19,7 +19,7 @@ Then open Vinny from Applications.
 
 ## Build
 
-Requires macOS 12.3+, Xcode, and Rust. The repository pins Rust 1.90 because `rustvncserver` requires it.
+Requires macOS 12.3+, Xcode, and Rust 1.90.
 
 ```bash
 cargo build
@@ -72,9 +72,9 @@ Each server configuration selects a display, maximum width, frame rate, address,
 Vinny supports RFB 3.3 through 3.8, common framebuffer encodings, framebuffer resizing, cursor metadata, extended key events, and clipboard sync. Capture and input account for Retina scaling. Handshakes time out after 10 seconds, and each server accepts at most eight clients.
 
 > [!WARNING]
-> Vinny defaults to an unauthenticated loopback listener for compatibility. Enable “Encrypted + password” before exposing a listener when your VNC viewer supports VeNCrypt/X509Plain. Otherwise use a trusted network or secure tunnel. View-only mode blocks remote input but still exposes screen contents.
+> Vinny defaults to an unauthenticated loopback listener. Enable “Encrypted + password” before exposing a listener when your VNC viewer supports VeNCrypt/X509Plain. Otherwise use a trusted network or secure tunnel. View-only mode blocks remote input but still exposes screen contents.
 
-TigerVNC is tested. Vinny does not work with macOS Screen Sharing because that client requests legacy VNC Authentication.
+TigerVNC works with Vinny. macOS Screen Sharing does not.
 
 ## Implementation
 
@@ -82,9 +82,7 @@ TigerVNC is tested. Vinny does not work with macOS Screen Sharing because that c
 - [`rustvncserver`](https://crates.io/crates/rustvncserver): Apache-2.0 RFB server
 - [`enigo`](https://crates.io/crates/enigo): MIT input injection
 
-Vinny vendors `rustvncserver` 2.2.1 for exact-address binding, connection limits, RFB version negotiation, VeNCrypt/X.509 TLS, and the extensions listed above.
-
-All resolved Rust dependencies use permissive licenses. None use the GPL or AGPL.
+Vinny uses the `rustvncserver` 2.2.1 source in `vendor/rustvncserver`.
 
 ## Documentation
 

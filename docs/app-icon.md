@@ -1,6 +1,6 @@
 # App icon
 
-Vinny ships an app icon even though it normally runs in the menu bar. macOS shows the icon in Finder, Spotlight, Open dialogs, System Settings, and permission prompts.
+macOS shows Vinny's app icon in Finder, Spotlight, Open dialogs, System Settings, and permission prompts.
 
 ## Apple requirements
 
@@ -11,7 +11,7 @@ Vinny ships an app icon even though it normally runs in the menu bar. macOS show
 
 ## Files and build
 
-Vinny is built with Cargo rather than an Xcode app target. `assets/Vinny.icns` contains 16, 32, 128, 256, and 512 point images at 1x and 2x. The source artwork is `assets/vinny-app-icon-source.png`. The 1024-pixel master is `assets/vinny-app-icon.png`.
+`assets/Vinny.icns` contains 16, 32, 128, 256, and 512 point images at 1x and 2x. The source artwork is `assets/vinny-app-icon-source.png`. The 1024-pixel master is `assets/vinny-app-icon.png`.
 
 The artwork has these constraints:
 
@@ -22,5 +22,3 @@ The artwork has these constraints:
 - a clear silhouette at small sizes
 
 The menu-bar icon is separate. It is a black-and-transparent AppKit template image with `isTemplate = true`, which lets macOS color it for the current appearance. See [`NSImage.isTemplate`](https://developer.apple.com/documentation/appkit/nsimage/istemplate).
-
-If the project moves to an Xcode target, put the same artwork in an asset catalog or Icon Composer document instead of maintaining the ICNS file by hand.

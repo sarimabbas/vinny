@@ -41,6 +41,6 @@ The smoke test requires Screen Recording and Accessibility permission for the pa
 2. Keep the change focused and include tests for behavior changes.
 3. Update user-facing documentation when behavior changes.
 4. Open a pull request. CI must pass before merge.
-5. Use a squash merge so `main` remains linear.
+5. Use a squash merge.
 
-Branch protection blocks direct pushes, force pushes, and deletion of `main`. Releases come from `main`. See [RELEASING.md](RELEASING.md).
+Branch protection blocks direct pushes, force pushes, and deletion of `main`. See [RELEASING.md](RELEASING.md) for the release process.
