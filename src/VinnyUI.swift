@@ -496,7 +496,7 @@ private struct ServerCard: View {
     let remove: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: 18) {
             HStack {
                 Circle().fill(statusColor).frame(width: 9, height: 9)
                 Text("Server \(number)")
@@ -511,7 +511,7 @@ private struct ServerCard: View {
                     .labelsHidden()
             }
 
-            VStack(spacing: 10) {
+            VStack(spacing: 14) {
                 settingRow("Display") {
                     Menu {
                         ForEach(displays) { display in
@@ -534,7 +534,7 @@ private struct ServerCard: View {
                     Stepper("\(configuration.fps) FPS", value: $configuration.fps, in: 1...60)
                 }
                 settingRow("Viewers") {
-                    VStack(alignment: .leading, spacing: 3) {
+                    VStack(alignment: .leading, spacing: 5) {
                         Menu {
                             ForEach(SharingPolicy.allCases, id: \.self) { policy in
                                 Button(policy.label) { configuration.sharingPolicy = policy }
@@ -550,7 +550,7 @@ private struct ServerCard: View {
                     }
                 }
                 settingRow("Remote control") {
-                    VStack(alignment: .leading, spacing: 3) {
+                    VStack(alignment: .leading, spacing: 5) {
                         Toggle(
                             "Allow keyboard and mouse",
                             isOn: Binding(
@@ -611,7 +611,7 @@ private struct ServerCard: View {
                     .buttonStyle(VinnyButtonStyle(enabled: true))
             }
         }
-        .padding(18)
+        .padding(22)
         .background(Color.white.opacity(0.72))
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         .overlay {
@@ -624,11 +624,11 @@ private struct ServerCard: View {
         _ label: String,
         @ViewBuilder content: () -> Content
     ) -> some View {
-        HStack(spacing: 16) {
+        HStack(alignment: .firstTextBaseline, spacing: 20) {
             Text(label)
                 .font(.custom("Maple Mono", size: 12).weight(.medium))
                 .foregroundColor(ink.opacity(0.7))
-                .frame(width: 112, alignment: .leading)
+                .frame(width: 120, alignment: .leading)
             content()
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -707,7 +707,7 @@ private struct ContentView: View {
             }
             .padding(28)
         }
-        .frame(width: 620, height: 720)
+        .frame(width: 680, height: 820)
         .font(.custom("Maple Mono", size: 12))
         .background(paper)
         .preferredColorScheme(.light)

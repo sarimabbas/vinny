@@ -139,7 +139,9 @@ pub fn start(
         .with_height(u32::from(geometry.capture_height))
         .with_pixel_format(PixelFormat::BGRA)
         .with_scales_to_fit(true)
-        .with_shows_cursor(false)
+        // Let ScreenCaptureKit composite the real system cursor so viewers that do not
+        // support cursor pseudo-encoding still see it, including shape changes.
+        .with_shows_cursor(true)
         .with_queue_depth(2)
         .with_fps(fps);
     let mut stream = SCStream::new(&filter, &config);

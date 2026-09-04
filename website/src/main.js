@@ -451,6 +451,16 @@ const pipPreview = document.querySelector("#pip-preview");
 const pipAddress = document.querySelector("#pip-address");
 const listenAddress = document.querySelector("#listen-address");
 const listenPort = document.querySelector("#listen-port");
+const secureServer = document.querySelector("#secure-server");
+const passwordRow = document.querySelector("#password-row");
+const listenerWarning = document.querySelector("#listener-warning");
+const viewerPolicy = document.querySelector("#viewer-policy");
+const viewerHelp = document.querySelector("#viewer-help");
+const viewerExplanations = {
+  "follow-client": "A viewer can share the session or request exclusive access.",
+  "always-shared": "New viewers join without disconnecting anyone.",
+  "single-client": "New connections are rejected while a viewer is connected.",
+};
 const fpsOutput = document.querySelector("#fps-output");
 let fps = 20;
 let serverTimer;
@@ -459,6 +469,12 @@ function updatePreviewAddress() {
   const address = listenAddress.value.trim() || "127.0.0.1";
   const port = listenPort.value || "5900";
   pipAddress.textContent = `${address}:${port}`;
+  listenerWarning.hidden = secureServer.checked || address === "127.0.0.1" || address === "::1";
+}
+
+function updateSecurityFields() {
+  passwordRow.hidden = !secureServer.checked;
+  updatePreviewAddress();
 }
 
 function stopServerPreview() {
@@ -509,6 +525,10 @@ document.querySelectorAll(".stepper button").forEach((button) => {
   });
 });
 
+viewerPolicy.addEventListener("change", () => {
+  viewerHelp.textContent = viewerExplanations[viewerPolicy.value];
+});
+secureServer.addEventListener("change", updateSecurityFields);
 listenAddress.addEventListener("input", updatePreviewAddress);
 listenPort.addEventListener("input", updatePreviewAddress);
 serverCard.addEventListener("submit", (event) => event.preventDefault());
