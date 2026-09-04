@@ -9,7 +9,7 @@ Vinny is a menu-bar app. Open it, grant Screen Recording and Accessibility once,
 
 ## Install
 
-The fully qualified command trusts only the Vinny cask, not the entire third-party tap:
+Use the fully qualified cask name so Homebrew trusts only the Vinny cask:
 
 ```bash
 brew install --cask sarimabbas/tap/vinny
@@ -27,23 +27,25 @@ cargo build
 open dist/Vinny.app
 ```
 
-The app opens a guided permission window. After both permissions are granted, enabled servers start automatically. Add another server to share another display—ports advance from `5900` by default. Vinny appears in the Dock while its window is open; closing the window returns it to a menu-bar-only app without stopping any servers.
+The app asks for Screen Recording and Accessibility access. Enabled servers start after both permissions are granted. New servers use the next free port starting at `5900`.
+
+Vinny appears in the Dock while its window is open. Closing the window hides the Dock icon but leaves the servers running.
 
 ## Package locally
 
-Create an ad-hoc signed app for local development:
+For an ad-hoc signed development build:
 
 ```bash
 ./scripts/package.sh
 ```
 
-Create a Developer ID signed app:
+For a Developer ID build:
 
 ```bash
 SIGN_IDENTITY='Developer ID Application: …' ./scripts/package.sh
 ```
 
-To sign, notarize, staple, and create a versioned release archive using credentials saved under the default `developer-notary` keychain profile:
+To sign, notarize, staple, and archive a release with the default `developer-notary` keychain profile:
 
 ```bash
 SIGN_IDENTITY='Developer ID Application: …' ./scripts/release.sh
@@ -51,7 +53,7 @@ SIGN_IDENTITY='Developer ID Application: …' ./scripts/release.sh
 
 Set `NOTARY_PROFILE` to use a differently named keychain profile. The archive and its SHA-256 checksum are written to `dist/`.
 
-A stable Developer ID signature and the `run.lil.vinny` bundle identifier are important because macOS associates privacy grants with code identity.
+Keep the Developer ID identity and `run.lil.vinny` bundle identifier stable. macOS ties privacy grants to that identity.
 
 ## Smoke test
 
@@ -65,24 +67,24 @@ The smoke launches `Vinny.app`, verifies that port 5900 is loopback-only, comple
 
 ## Capabilities
 
-Vinny runs configurable per-display servers in one native app, with persistent display, resolution, frame-rate, listener, viewer, input, and security settings. It supports RFB 3.3–3.8, common framebuffer encodings and protocol extensions, Retina-aware capture and input, dynamic display resizing, remote cursor metadata, extended keyboard events, and bidirectional clipboard synchronization.
+Each server configuration selects a display, maximum width, frame rate, address, port, sharing policy, and whether remote control or encryption is enabled. Settings persist between launches.
 
-Connections are bounded and time-limited during negotiation. Each server can stay loopback-only, listen on IPv4 or IPv6, allow one or several viewers, disable remote control, or use password-authenticated VeNCrypt/X.509 TLS.
+Vinny supports RFB 3.3 through 3.8, common framebuffer encodings, framebuffer resizing, cursor metadata, extended key events, and clipboard sync. Capture and input account for Retina scaling. Handshakes time out after 10 seconds, and each server accepts at most eight clients.
 
 > [!WARNING]
 > Vinny defaults to an unauthenticated loopback listener for compatibility. Enable “Encrypted + password” before exposing a listener when your VNC viewer supports VeNCrypt/X509Plain. Otherwise use a trusted network or secure tunnel. View-only mode blocks remote input but still exposes screen contents.
 
-TigerVNC is tested. macOS Screen Sharing requests legacy VNC Authentication, which Vinny intentionally does not offer.
+TigerVNC is tested. Vinny does not work with macOS Screen Sharing because that client requests legacy VNC Authentication.
 
 ## Implementation
 
-- [`screencapturekit`](https://crates.io/crates/screencapturekit) — MIT/Apache-2.0 capture bindings
-- [`rustvncserver`](https://crates.io/crates/rustvncserver) — Apache-2.0 RFB server
-- [`enigo`](https://crates.io/crates/enigo) — MIT input injection
+- [`screencapturekit`](https://crates.io/crates/screencapturekit): MIT/Apache-2.0 capture bindings
+- [`rustvncserver`](https://crates.io/crates/rustvncserver): Apache-2.0 RFB server
+- [`enigo`](https://crates.io/crates/enigo): MIT input injection
 
-Vinny vendors `rustvncserver` 2.2.1 to add exact-address binding, bounded connection lifecycles, standards-compliant version and security negotiation, VeNCrypt/X.509 TLS, and common RFB extensions used by modern viewers.
+Vinny vendors `rustvncserver` 2.2.1 for exact-address binding, connection limits, RFB version negotiation, VeNCrypt/X.509 TLS, and the extensions listed above.
 
-All resolved Rust dependencies are permissively licensed; there are no GPL or AGPL dependencies.
+All resolved Rust dependencies use permissive licenses. None use the GPL or AGPL.
 
 ## Documentation
 

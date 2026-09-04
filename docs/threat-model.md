@@ -1,50 +1,48 @@
-# Vinny threat model
+# Threat model
 
-## Security posture
+## Scope
 
-Vinny is a native macOS VNC server. Its intended safe default is an unauthenticated listener on `127.0.0.1`; users may deliberately bind a server to another IPv4 or IPv6 address. Each server can instead use password-authenticated VeNCrypt/X509Plain over TLS, and passwords are stored in the macOS Keychain.
+Vinny captures a Mac display and serves it over VNC. ScreenCaptureKit provides screen access, and macOS Accessibility APIs provide keyboard and pointer control. macOS grants those permissions to Vinny's signed bundle identity.
 
-Vinny receives sensitive screen content through ScreenCaptureKit and can inject input through macOS accessibility APIs. macOS permission prompts and the stable signed bundle identity control those capabilities.
+A new server listens without authentication on `127.0.0.1`. Users can choose another IPv4 or IPv6 address, enable VeNCrypt/X509Plain with a password, or disable remote control. Passwords are stored in the macOS Keychain.
 
-## Trust boundaries
+## VNC clients
 
-### VNC connection
+A connected client can receive screen and clipboard contents. Unless remote control is disabled, it can also send clipboard text, keyboard events, and pointer events.
 
-A VNC viewer sends protocol messages, clipboard contents, and—unless remote control is disabled—keyboard and pointer input. Vinny returns captured screen content and clipboard updates.
+Vinny applies these limits:
 
-Existing controls:
+- a loopback default and a warning for plaintext non-loopback listeners
+- optional TLS and password authentication
+- view-only and sharing controls
+- strict security negotiation and size limits for protocol fields
+- a 10-second handshake timeout
+- a one-second delay after a wrong password
+- a limit of eight clients per server
 
-- loopback-only default and a warning for unsecured non-loopback listeners;
-- optional VeNCrypt/X.509 TLS with password authentication;
-- view-only and viewer-sharing policies;
-- strict security-type negotiation and bounded protocol fields;
-- a 10-second handshake timeout, a one-second failed-password delay, and at most eight clients per server.
+## TLS certificates
 
-### TLS identity
+Vinny creates a self-signed certificate when a server starts. The certificate changes when the server is recreated, so its fingerprint is not a stable server identity. Check certificate prompts or use a trusted tunnel on hostile networks.
 
-Encrypted servers use a generated self-signed certificate. It encrypts the session, but it is regenerated when the server is recreated. A viewer therefore cannot rely on a stable certificate fingerprint to identify Vinny across restarts.
+## Releases
 
-### Release credentials
+Pull-request jobs cannot access release credentials. A maintainer starts a release from protected `main` and approves the `release` environment after the unprivileged build passes. Releases use immutable tags and assets. Homebrew updates go through a separate pull request.
 
-Pull-request CI has no signing credentials. Releases are manually started from protected `main`; compilation happens before the protected `release` environment receives Apple and Homebrew credentials. Published assets and tags are immutable, and Homebrew updates require a separate protected pull request.
+## Remaining risks
 
-## Residual risks
-
-| Risk | When it matters | Current guidance |
+| Risk | Exposure | Mitigation |
 |---|---|---|
-| Unauthenticated screen or input access | A plaintext listener is reachable by an untrusted device | Keep plaintext listeners on loopback or a trusted network; otherwise enable encrypted mode or use a secure tunnel. |
-| Server impersonation | A viewer accepts a changed self-signed certificate on a hostile network | Verify certificate prompts or use a trusted tunnel. A persistent certificate can be added if direct hostile-network use becomes important. |
-| Password or resource abuse | An encrypted listener is publicly reachable | Failed passwords are delayed and concurrent clients are bounded. Stronger rate limits can be added if real-world exposure warrants them. |
-| Release compromise | The maintainer account and release approval session are compromised | Preserve branch protection, hardware-backed account security, manual release approval, and cask review. |
+| Unauthenticated viewing or input | An untrusted device can reach a plaintext listener | Keep it on loopback or a trusted network. Otherwise use encrypted mode or a secure tunnel. |
+| Server impersonation | A viewer accepts a changed self-signed certificate on a hostile network | Check the certificate prompt or use a trusted tunnel. |
+| Password guessing or resource exhaustion | An encrypted listener is reachable from an untrusted network | Use a strong password. Vinny delays failures and limits clients. |
+| Release compromise | The maintainer account or approval session is compromised | Keep branch protection, account security, manual approval, and cask review enabled. |
 
-The first three risks are low under the default loopback deployment and increase when a listener is exposed beyond a trusted network.
+## Relevant code
 
-## Security-sensitive code
+- `vendor/rustvncserver/src/client.rs`: RFB parsing, VeNCrypt, and TLS authentication
+- `vendor/rustvncserver/src/server.rs`: client limits, sharing policy, and client cleanup
+- `src/main.rs`: server configuration and event routing
+- `src/VinnyUI.swift`: listener settings, Keychain access, and security controls
+- `.github/workflows/release.yml`: signing, notarization, publishing, and Homebrew updates
 
-- `vendor/rustvncserver/src/client.rs` — untrusted RFB parsing, VeNCrypt, and TLS authentication
-- `vendor/rustvncserver/src/server.rs` — connection limits, sharing policy, and client lifecycle
-- `src/main.rs` — server configuration and capture/input event routing
-- `src/VinnyUI.swift` — network exposure, Keychain access, and security controls
-- `.github/workflows/release.yml` — signing, notarization, publishing, and tap updates
-
-Report vulnerabilities privately as described in [SECURITY.md](SECURITY.md).
+Report vulnerabilities through the process in [SECURITY.md](SECURITY.md).

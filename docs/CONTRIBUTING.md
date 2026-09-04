@@ -1,10 +1,8 @@
 # Contributing to Vinny
 
-Thanks for helping improve Vinny.
-
 ## Before opening an issue
 
-- Use [GitHub Discussions](https://github.com/sarimabbas/vinny/discussions) for usage questions if discussions are enabled.
+- Use [GitHub Discussions](https://github.com/sarimabbas/vinny/discussions) for usage questions.
 - Report security vulnerabilities privately as described in [SECURITY.md](SECURITY.md).
 - Security reports should distinguish the default plaintext loopback mode from the optional VeNCrypt/X.509 TLS mode.
 
@@ -45,4 +43,4 @@ The smoke test requires Screen Recording and Accessibility permission for the pa
 4. Open a pull request. CI must pass before merge.
 5. Use a squash merge so `main` remains linear.
 
-Direct pushes, force pushes, and deletion of `main` are blocked. Maintainers release only from protected `main`; see [RELEASING.md](RELEASING.md).
+Branch protection blocks direct pushes, force pushes, and deletion of `main`. Releases come from `main`. See [RELEASING.md](RELEASING.md).
