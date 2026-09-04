@@ -1,5 +1,6 @@
 import AppKit
 import CoreText
+import Darwin
 import Security
 import SwiftUI
 
@@ -80,6 +81,18 @@ private let portFormatter: NumberFormatter = {
     formatter.usesGroupingSeparator = false
     return formatter
 }()
+
+private func parsedIPAddress(_ address: String) -> Data? {
+    var ipv4 = in_addr()
+    if address.withCString({ inet_pton(AF_INET, $0, &ipv4) }) == 1 {
+        return Data(bytes: &ipv4, count: MemoryLayout.size(ofValue: ipv4))
+    }
+    var ipv6 = in6_addr()
+    if address.withCString({ inet_pton(AF_INET6, $0, &ipv6) }) == 1 {
+        return Data(bytes: &ipv6, count: MemoryLayout.size(ofValue: ipv6))
+    }
+    return nil
+}
 
 private struct DisplayOption: Identifiable, Equatable {
     let id: Int
@@ -384,14 +397,20 @@ private final class VinnyModel: ObservableObject {
             errors[configuration.id] = "Maximum width must be between 320 and 7680."
             return false
         }
-        if configuration.address.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+        let address = configuration.address.trimmingCharacters(in: .whitespacesAndNewlines)
+        if address.isEmpty {
             errors[configuration.id] = "Enter an IP address assigned to this Mac."
             return false
         }
-        if servers.contains(where: {
-            $0.id != configuration.id && $0.enabled && $0.port == configuration.port && $0.address == configuration.address
-        }) {
-            errors[configuration.id] = "Another server already uses this address and port."
+        guard let parsedAddress = parsedIPAddress(configuration.address) else {
+            errors[configuration.id] = "Enter a valid IPv4 or IPv6 address."
+            return false
+        }
+        if let currentIndex = servers.firstIndex(where: { $0.id == configuration.id }),
+           let duplicateIndex = servers[..<currentIndex].firstIndex(where: {
+               $0.enabled && $0.port == configuration.port && parsedIPAddress($0.address) == parsedAddress
+           }) {
+            errors[configuration.id] = "Server \(duplicateIndex + 1) already uses this address and port."
             return false
         }
         return true

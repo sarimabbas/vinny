@@ -755,7 +755,7 @@ impl VncClient {
         const MAX_CUT_TEXT: usize = 10 * 1024 * 1024; // 10MB limit
 
         let mut buf = BytesMut::with_capacity(4096);
-        let mut check_interval = tokio::time::interval(tokio::time::Duration::from_millis(16));
+        let mut check_interval = tokio::time::interval(tokio::time::Duration::from_millis(8));
         let mut command_rx = self
             .command_rx
             .take()
@@ -1190,7 +1190,7 @@ impl VncClient {
                                     let elapsed = now.duration_since(defer_start);
                                     let last_sent = *self.last_update_sent.read().await;
                                     let time_since_last = now.duration_since(last_sent);
-                                    let min_interval = Duration::from_millis(33); // ~30 FPS max
+                                    let min_interval = Duration::from_millis(8); // Headroom for 60 FPS capture
 
                                     elapsed >= self.defer_update_time && time_since_last >= min_interval
                                 }

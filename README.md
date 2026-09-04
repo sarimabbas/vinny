@@ -72,6 +72,8 @@ Connections are bounded and time-limited during negotiation. Each server can sta
 > [!WARNING]
 > Vinny defaults to an unauthenticated loopback listener for compatibility. Enable “Encrypted + password” before exposing a listener when your VNC viewer supports VeNCrypt/X509Plain. Otherwise use a trusted network or secure tunnel. View-only mode blocks remote input but still exposes screen contents.
 
+TigerVNC is tested. macOS Screen Sharing requests legacy VNC Authentication, which Vinny intentionally does not offer.
+
 ## Implementation
 
 - [`screencapturekit`](https://crates.io/crates/screencapturekit) — MIT/Apache-2.0 capture bindings
