@@ -63,25 +63,11 @@ After packaging and granting permissions:
 
 The smoke launches `Vinny.app`, verifies that port 5900 is loopback-only, completes an RFB 3.8 handshake, requests a framebuffer, and confirms captured pixels are non-empty.
 
-## Status
+## Capabilities
 
-- [x] One configurable VNC server per display in one app process
-- [x] Persistent display, port, maximum-width, frame-rate, and listen-address settings
-- [x] Retina-aware input scaling
-- [x] Raw, Hextile, Tight, ZRLE, and other noVNC-compatible encodings
-- [x] Mouse, scrolling, common keys, modifiers, and Unicode input
-- [x] Guided Screen Recording and Accessibility permission setup
-- [x] Configurable IPv4 and IPv6 listeners with a loopback default
-- [x] Bounded concurrent clients, handshake timeouts, and task cleanup
-- [x] Optional VeNCrypt/X.509 TLS transport with password authentication
-- [x] Bidirectional legacy and extended UTF-8 clipboard synchronization
-- [x] Remote cursor pseudo-encoding
-- [x] Dynamic framebuffer and display-layout updates
-- [x] Extended keyboard events for layout-independent input
-- [x] View-only and configurable client-sharing policies
-- [x] RFB 3.3, 3.7, and 3.8 compatibility
-- [x] Fence, ContinuousUpdates, LastRect, DesktopName, and ExtendedDesktopSize extensions
-- [ ] Login-window control
+Vinny runs configurable per-display servers in one native app, with persistent display, resolution, frame-rate, listener, viewer, input, and security settings. It supports RFB 3.3–3.8, common framebuffer encodings and protocol extensions, Retina-aware capture and input, dynamic display resizing, remote cursor metadata, extended keyboard events, and bidirectional clipboard synchronization.
+
+Connections are bounded and time-limited during negotiation. Each server can stay loopback-only, listen on IPv4 or IPv6, allow one or several viewers, disable remote control, or use password-authenticated VeNCrypt/X.509 TLS.
 
 > [!WARNING]
 > Vinny defaults to an unauthenticated loopback listener for compatibility. Enable “Encrypted + password” before exposing a listener when your VNC viewer supports VeNCrypt/X509Plain. Otherwise use a trusted network or secure tunnel. View-only mode blocks remote input but still exposes screen contents.

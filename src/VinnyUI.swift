@@ -121,9 +121,17 @@ private enum SharingPolicy: String, Codable, CaseIterable {
 
     var label: String {
         switch self {
-        case .followClient: "Follow viewer request"
-        case .alwaysShared: "Always allow sharing"
-        case .singleClient: "One viewer only"
+        case .followClient: "Viewer decides"
+        case .alwaysShared: "Allow multiple viewers"
+        case .singleClient: "One viewer at a time"
+        }
+    }
+
+    var explanation: String {
+        switch self {
+        case .followClient: "A viewer can share the session or request exclusive access."
+        case .alwaysShared: "New viewers join without disconnecting anyone."
+        case .singleClient: "New connections are rejected while a viewer is connected."
         }
     }
 }
@@ -525,18 +533,36 @@ private struct ServerCard: View {
                 settingRow("Frame rate") {
                     Stepper("\(configuration.fps) FPS", value: $configuration.fps, in: 1...60)
                 }
-                settingRow("Connections") {
-                    Menu {
-                        ForEach(SharingPolicy.allCases, id: \.self) { policy in
-                            Button(policy.label) { configuration.sharingPolicy = policy }
+                settingRow("Viewers") {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Menu {
+                            ForEach(SharingPolicy.allCases, id: \.self) { policy in
+                                Button(policy.label) { configuration.sharingPolicy = policy }
+                            }
+                        } label: {
+                            Text(configuration.sharingPolicy.label)
+                                .frame(maxWidth: .infinity, alignment: .leading)
                         }
-                    } label: {
-                        Text(configuration.sharingPolicy.label)
-                            .frame(maxWidth: .infinity, alignment: .leading)
+                        Text(configuration.sharingPolicy.explanation)
+                            .font(.custom("Maple Mono", size: 11))
+                            .foregroundColor(ink.opacity(0.58))
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                 }
-                settingRow("Input") {
-                    Toggle("View only", isOn: $configuration.viewOnly)
+                settingRow("Remote control") {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Toggle(
+                            "Allow keyboard and mouse",
+                            isOn: Binding(
+                                get: { !configuration.viewOnly },
+                                set: { configuration.viewOnly = !$0 }
+                            )
+                        )
+                        Text("Off blocks keyboard, mouse, and incoming clipboard changes.")
+                            .font(.custom("Maple Mono", size: 11))
+                            .foregroundColor(ink.opacity(0.58))
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
                 settingRow("Security") {
                     Toggle("Encrypted + password", isOn: $configuration.secure)
