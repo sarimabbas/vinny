@@ -14,4 +14,6 @@ Include the affected version, reproduction steps, impact, and suggested fix if y
 
 The default listener is unauthenticated and bound to `127.0.0.1`. Encrypted servers use VeNCrypt/X509Plain, a Keychain-stored password, and a self-signed certificate. The certificate changes when the server is recreated, so the viewer may ask for approval again.
 
-Anyone who can reach an unsecured listener can see the screen and, unless view-only mode is on, control the Mac. Use encrypted mode, a trusted network, or a secure tunnel such as Tailscale. Do not expose Vinny directly to the public internet.
+The optional legacy VNC authentication mode supports macOS Screen Sharing. It limits the server password to eight bytes and does not encrypt screen contents or input.
+
+Anyone who can reach an unsecured or legacy-compatible listener can see the screen after satisfying that listener's authentication requirements and, unless view-only mode is on, control the Mac. Use encrypted mode, a trusted network, or a secure tunnel such as Tailscale. Do not expose Vinny directly to the public internet.

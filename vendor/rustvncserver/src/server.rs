@@ -254,9 +254,34 @@ impl VncServer {
         sharing_policy: SharingPolicy,
         view_only: bool,
     ) -> (Self, mpsc::UnboundedReceiver<ServerEvent>) {
+        Self::new_with_policy_and_legacy_auth(
+            width,
+            height,
+            desktop_name,
+            password,
+            false,
+            sharing_policy,
+            view_only,
+        )
+    }
+
+    /// Creates a server that can also accept legacy VNC password authentication.
+    ///
+    /// # Panics
+    /// Panics if TLS setup fails or a legacy password is not between one and eight bytes.
+    #[must_use]
+    pub fn new_with_policy_and_legacy_auth(
+        width: u16,
+        height: u16,
+        desktop_name: String,
+        password: Option<String>,
+        legacy_auth: bool,
+        sharing_policy: SharingPolicy,
+        view_only: bool,
+    ) -> (Self, mpsc::UnboundedReceiver<ServerEvent>) {
         let (event_tx, event_rx) = mpsc::unbounded_channel();
-        let security = SecurityConfig::from_password(password.clone())
-            .expect("generate VeNCrypt TLS certificate");
+        let security = SecurityConfig::from_password_and_legacy_auth(password.clone(), legacy_auth)
+            .expect("generate VNC security configuration");
 
         let server = Self {
             framebuffer: Framebuffer::new(width, height),

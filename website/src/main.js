@@ -453,6 +453,9 @@ const listenAddress = document.querySelector("#listen-address");
 const listenPort = document.querySelector("#listen-port");
 const secureServer = document.querySelector("#secure-server");
 const passwordRow = document.querySelector("#password-row");
+const passwordInput = document.querySelector("#server-password");
+const legacyAuth = document.querySelector("#legacy-auth");
+const legacyAuthRow = document.querySelector("#legacy-auth-row");
 const listenerWarning = document.querySelector("#listener-warning");
 const viewerPolicy = document.querySelector("#viewer-policy");
 const viewerHelp = document.querySelector("#viewer-help");
@@ -469,11 +472,18 @@ function updatePreviewAddress() {
   const address = listenAddress.value.trim() || "127.0.0.1";
   const port = listenPort.value || "5900";
   pipAddress.textContent = `${address}:${port}`;
-  listenerWarning.hidden = secureServer.checked || address === "127.0.0.1" || address === "::1";
+  const legacyEnabled = secureServer.checked && legacyAuth.checked;
+  listenerWarning.hidden = (!legacyEnabled && secureServer.checked) || address === "127.0.0.1" || address === "::1";
+  listenerWarning.textContent = legacyEnabled
+    ? "Legacy VNC connections are password-protected but plaintext. Use only trusted networks or a secure tunnel."
+    : "This listener is unauthenticated and plaintext. Use only trusted networks or a secure tunnel.";
 }
 
 function updateSecurityFields() {
+  if (!secureServer.checked) legacyAuth.checked = false;
   passwordRow.hidden = !secureServer.checked;
+  passwordInput.placeholder = legacyAuth.checked ? "1–8 bytes" : "Required";
+  legacyAuthRow.hidden = !secureServer.checked;
   updatePreviewAddress();
 }
 
@@ -529,6 +539,7 @@ viewerPolicy.addEventListener("change", () => {
   viewerHelp.textContent = viewerExplanations[viewerPolicy.value];
 });
 secureServer.addEventListener("change", updateSecurityFields);
+legacyAuth.addEventListener("change", updateSecurityFields);
 listenAddress.addEventListener("input", updatePreviewAddress);
 listenPort.addEventListener("input", updatePreviewAddress);
 serverCard.addEventListener("submit", (event) => event.preventDefault());

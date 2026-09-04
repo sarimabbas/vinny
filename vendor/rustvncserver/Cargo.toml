@@ -20,6 +20,8 @@ bytes = "1"
 log = "0.4"
 thiserror = "1.0"       # Error handling
 flate2 = "1.0"          # Zlib compression for Tight encoding
+des = "0.8"
+getrandom = "0.3"
 rcgen = "0.14"
 tokio-rustls = "0.26"
 rfb-encodings = { path = "../rfb-encodings" }   # RFB encoding implementations

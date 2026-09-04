@@ -160,6 +160,7 @@ private struct ServerConfiguration: Codable, Identifiable, Equatable {
     var sharingPolicy: SharingPolicy
     var viewOnly: Bool
     var secure: Bool
+    var legacyAuth: Bool
 
     init(
         id: UInt64,
@@ -171,7 +172,8 @@ private struct ServerConfiguration: Codable, Identifiable, Equatable {
         enabled: Bool,
         sharingPolicy: SharingPolicy = .followClient,
         viewOnly: Bool = false,
-        secure: Bool = false
+        secure: Bool = false,
+        legacyAuth: Bool = false
     ) {
         self.id = id
         self.display = display
@@ -183,10 +185,11 @@ private struct ServerConfiguration: Codable, Identifiable, Equatable {
         self.sharingPolicy = sharingPolicy
         self.viewOnly = viewOnly
         self.secure = secure
+        self.legacyAuth = legacyAuth
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, display, port, maxWidth, fps, address, enabled, sharingPolicy, viewOnly, secure
+        case id, display, port, maxWidth, fps, address, enabled, sharingPolicy, viewOnly, secure, legacyAuth
     }
 
     init(from decoder: Decoder) throws {
@@ -201,6 +204,7 @@ private struct ServerConfiguration: Codable, Identifiable, Equatable {
         sharingPolicy = try values.decodeIfPresent(SharingPolicy.self, forKey: .sharingPolicy) ?? .followClient
         viewOnly = try values.decodeIfPresent(Bool.self, forKey: .viewOnly) ?? false
         secure = try values.decodeIfPresent(Bool.self, forKey: .secure) ?? false
+        legacyAuth = try values.decodeIfPresent(Bool.self, forKey: .legacyAuth) ?? false
     }
 
     static let primary = ServerConfiguration(
@@ -223,6 +227,7 @@ private struct RuntimeServerConfiguration: Encodable {
     let sharingPolicy: SharingPolicy
     let viewOnly: Bool
     let password: String?
+    let legacyAuth: Bool
 
     init(configuration: ServerConfiguration, password: String?) {
         address = configuration.address
@@ -233,6 +238,7 @@ private struct RuntimeServerConfiguration: Encodable {
         sharingPolicy = configuration.sharingPolicy
         viewOnly = configuration.viewOnly
         self.password = password
+        legacyAuth = configuration.secure && configuration.legacyAuth
     }
 }
 
@@ -346,7 +352,13 @@ private final class VinnyModel: ObservableObject {
         guard validate(configuration) else { return }
         let password = passwords[configuration.id] ?? ""
         if configuration.secure && password.isEmpty {
-            errors[configuration.id] = "Enter a password for encrypted connections."
+            errors[configuration.id] = configuration.legacyAuth
+                ? "Enter a password containing 1 to 8 bytes."
+                : "Enter a password for encrypted connections."
+            return
+        }
+        if configuration.secure && configuration.legacyAuth && password.utf8.count > 8 {
+            errors[configuration.id] = "Password is too long for legacy authentication. Use 1 to 8 bytes."
             return
         }
         storePassword(configuration.secure ? password : "", for: configuration.id)
@@ -584,11 +596,25 @@ private struct ServerCard: View {
                     }
                 }
                 settingRow("Security") {
-                    Toggle("Encrypted + password", isOn: $configuration.secure)
+                    VStack(alignment: .leading, spacing: 8) {
+                        Toggle(
+                            "Encrypted + password",
+                            isOn: Binding(
+                                get: { configuration.secure },
+                                set: {
+                                    configuration.secure = $0
+                                    if !$0 { configuration.legacyAuth = false }
+                                }
+                            )
+                        )
+                        if configuration.secure {
+                            Toggle("Legacy authentication (unencrypted)", isOn: $configuration.legacyAuth)
+                        }
+                    }
                 }
                 if configuration.secure {
                     settingRow("Password") {
-                        SecureField("Required", text: $password)
+                        SecureField(configuration.legacyAuth ? "1–8 bytes" : "Required", text: $password)
                             .textFieldStyle(.roundedBorder)
                     }
                 }
@@ -605,10 +631,12 @@ private struct ServerCard: View {
                             .accessibilityLabel("Port")
                     }
                 }
-                if !configuration.secure
+                if (!configuration.secure || configuration.legacyAuth)
                     && configuration.address != "127.0.0.1"
                     && configuration.address != "::1" {
-                    Text("This listener is unauthenticated and plaintext. Use only trusted networks or a secure tunnel.")
+                    Text(configuration.legacyAuth
+                        ? "Legacy VNC connections are password-protected but plaintext. Use only trusted networks or a secure tunnel."
+                        : "This listener is unauthenticated and plaintext. Use only trusted networks or a secure tunnel.")
                         .font(.custom("Maple Mono", size: 11))
                         .foregroundColor(ink.opacity(0.62))
                         .frame(maxWidth: .infinity, alignment: .leading)

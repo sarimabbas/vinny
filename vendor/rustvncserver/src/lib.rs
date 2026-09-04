@@ -30,6 +30,7 @@
 //!   palette, full-color zlib, JPEG)
 //! - **RFB compatibility**: Versions 3.3, 3.7, and 3.8 plus common pseudo-encodings
 //! - **Secure transport**: Optional password-authenticated VeNCrypt/X.509 TLS
+//! - **Legacy compatibility**: Optional VNC authentication for RFB 3.3 clients
 //! - **Async I/O**: Built on Tokio for efficient concurrent client handling
 //! - **Memory safe**: Pure Rust with zero unsafe code in core logic
 //! - **Optional `TurboJPEG`**: Hardware-accelerated JPEG compression via feature flag

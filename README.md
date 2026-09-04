@@ -69,12 +69,12 @@ The smoke launches `Vinny.app`, verifies that port 5900 is loopback-only, comple
 
 Each server configuration selects a display, maximum width, frame rate, address, port, sharing policy, and whether remote control or encryption is enabled. Settings persist between launches.
 
-Vinny supports RFB 3.3 through 3.8, common framebuffer encodings, framebuffer resizing, cursor metadata, extended key events, and clipboard sync. Capture and input account for Retina scaling. Handshakes time out after 10 seconds, and each server accepts at most eight clients.
+Vinny supports RFB 3.3 through 3.8, common framebuffer encodings, framebuffer resizing, cursor metadata, extended key events, and clipboard sync. Encrypted servers can optionally accept legacy VNC authentication for macOS Screen Sharing. Capture and input account for Retina scaling. Handshakes time out after 10 seconds, and each server accepts at most eight clients.
 
 > [!WARNING]
-> Vinny defaults to an unauthenticated loopback listener. Enable “Encrypted + password” before exposing a listener when your VNC viewer supports VeNCrypt/X509Plain. Otherwise use a trusted network or secure tunnel. View-only mode blocks remote input but still exposes screen contents.
+> Vinny defaults to an unauthenticated loopback listener. Enable “Encrypted + password” before exposing a listener when your VNC viewer supports VeNCrypt/X509Plain. Legacy VNC authentication protects access with a password but does not encrypt screen contents or input. Otherwise use a trusted network or secure tunnel. View-only mode blocks remote input but still exposes screen contents.
 
-TigerVNC works with Vinny. macOS Screen Sharing does not.
+TigerVNC supports encrypted connections. macOS Screen Sharing requires the optional legacy authentication setting.
 
 ## Implementation
 

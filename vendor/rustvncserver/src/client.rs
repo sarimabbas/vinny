@@ -34,6 +34,8 @@
 //! - **Rate Limiting**: Prevents overwhelming clients with excessive update frequency
 
 use bytes::{Buf, BufMut, BytesMut};
+use des::cipher::{Block, BlockEncrypt, KeyInit};
+use des::Des;
 use flate2::read::ZlibDecoder;
 use flate2::write::ZlibEncoder;
 use flate2::Compress;
@@ -67,8 +69,8 @@ use crate::protocol::{
     ENCODING_RAW, ENCODING_RRE, ENCODING_TIGHT, ENCODING_TIGHTPNG, ENCODING_ZLIB, ENCODING_ZLIBHEX,
     ENCODING_ZRLE, ENCODING_ZYWRLE, PROTOCOL_VERSION, PROTOCOL_VERSION_3_3, PROTOCOL_VERSION_3_7,
     PROTOCOL_VERSION_3_8, SECURITY_RESULT_FAILED, SECURITY_RESULT_OK, SECURITY_TYPE_NONE,
-    SECURITY_TYPE_VENCRYPT, SERVER_MSG_END_OF_CONTINUOUS_UPDATES, SERVER_MSG_FENCE,
-    SERVER_MSG_FRAMEBUFFER_UPDATE, SERVER_MSG_SERVER_CUT_TEXT,
+    SECURITY_TYPE_VENCRYPT, SECURITY_TYPE_VNC_AUTH, SERVER_MSG_END_OF_CONTINUOUS_UPDATES,
+    SERVER_MSG_FENCE, SERVER_MSG_FRAMEBUFFER_UPDATE, SERVER_MSG_SERVER_CUT_TEXT,
 };
 use rfb_encodings::translate;
 
@@ -95,14 +97,34 @@ pub(crate) enum SecurityConfig {
     VeNCrypt {
         tls: Arc<rustls::ServerConfig>,
         password: Arc<str>,
+        legacy_auth: bool,
     },
 }
 
 impl SecurityConfig {
     pub(crate) fn from_password(password: Option<String>) -> Result<Self, std::io::Error> {
+        Self::from_password_and_legacy_auth(password, false)
+    }
+
+    pub(crate) fn from_password_and_legacy_auth(
+        password: Option<String>,
+        legacy_auth: bool,
+    ) -> Result<Self, std::io::Error> {
         let Some(password) = password else {
+            if legacy_auth {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    "legacy VNC authentication requires a password",
+                ));
+            }
             return Ok(Self::None);
         };
+        if legacy_auth && (password.is_empty() || password.len() > 8) {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "legacy VNC passwords must contain 1 to 8 bytes",
+            ));
+        }
         let certificate = rcgen::generate_simple_self_signed(vec!["vinny.local".into()])
             .map_err(std::io::Error::other)?;
         let key =
@@ -117,7 +139,29 @@ impl SecurityConfig {
         Ok(Self::VeNCrypt {
             tls: Arc::new(tls),
             password: password.into(),
+            legacy_auth,
         })
+    }
+
+    fn security_types(&self) -> Vec<u8> {
+        match self {
+            Self::None => vec![SECURITY_TYPE_NONE],
+            Self::VeNCrypt {
+                legacy_auth: true, ..
+            } => vec![SECURITY_TYPE_VENCRYPT, SECURITY_TYPE_VNC_AUTH],
+            Self::VeNCrypt { .. } => vec![SECURITY_TYPE_VENCRYPT],
+        }
+    }
+
+    fn legacy_password(&self) -> Option<&str> {
+        match self {
+            Self::VeNCrypt {
+                password,
+                legacy_auth: true,
+                ..
+            } => Some(password),
+            Self::None | Self::VeNCrypt { .. } => None,
+        }
     }
 }
 
@@ -296,6 +340,57 @@ fn constant_time_eq(expected: &[u8], supplied: &[u8]) -> bool {
         .zip(supplied)
         .fold(0u8, |difference, (left, right)| difference | (left ^ right))
         == 0
+}
+
+fn vnc_auth_response(challenge: &[u8; 16], password: &str) -> [u8; 16] {
+    let mut key = [0u8; 8];
+    for (target, source) in key.iter_mut().zip(password.as_bytes()) {
+        *target = source.reverse_bits();
+    }
+    let cipher = Des::new_from_slice(&key).expect("DES keys contain 8 bytes");
+    let mut response = *challenge;
+    for chunk in response.chunks_exact_mut(8) {
+        cipher.encrypt_block(Block::<Des>::from_mut_slice(chunk));
+    }
+    response
+}
+
+async fn authenticate_vnc(
+    stream: &mut TcpStream,
+    password: &str,
+    protocol_version: ProtocolVersion,
+) -> Result<(), std::io::Error> {
+    let mut challenge = [0u8; 16];
+    getrandom::fill(&mut challenge).map_err(|error| std::io::Error::other(error.to_string()))?;
+    stream.write_all(&challenge).await?;
+    let mut supplied_response = [0u8; 16];
+    stream.read_exact(&mut supplied_response).await?;
+    let authenticated =
+        constant_time_eq(&vnc_auth_response(&challenge, password), &supplied_response);
+    throttle_failed_authentication(authenticated).await;
+    stream
+        .write_all(
+            &(if authenticated {
+                SECURITY_RESULT_OK
+            } else {
+                SECURITY_RESULT_FAILED
+            })
+            .to_be_bytes(),
+        )
+        .await?;
+    if authenticated {
+        return Ok(());
+    }
+    if protocol_version == ProtocolVersion::V3_8 {
+        let reason = b"Authentication failed";
+        let reason_length = u32::try_from(reason.len()).map_err(std::io::Error::other)?;
+        stream.write_all(&reason_length.to_be_bytes()).await?;
+        stream.write_all(reason).await?;
+    }
+    Err(std::io::Error::new(
+        std::io::ErrorKind::PermissionDenied,
+        "legacy VNC authentication failed",
+    ))
 }
 
 fn default_wire_pixel_format() -> PixelFormat {
@@ -499,48 +594,64 @@ impl VncClient {
         #[cfg(feature = "debug-logging")]
         info!("Client version: {}", String::from_utf8_lossy(&version_buf));
 
-        let offered_security_type = match security {
-            SecurityConfig::None => SECURITY_TYPE_NONE,
-            SecurityConfig::VeNCrypt { .. } => SECURITY_TYPE_VENCRYPT,
-        };
-        if protocol_version == ProtocolVersion::V3_3
-            && offered_security_type == SECURITY_TYPE_VENCRYPT
-        {
-            stream.write_all(&0u32.to_be_bytes()).await?;
-            let reason = b"Encrypted servers require RFB 3.7 or newer";
-            let reason_length = u32::try_from(reason.len()).map_err(std::io::Error::other)?;
-            stream.write_all(&reason_length.to_be_bytes()).await?;
-            stream.write_all(reason).await?;
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::Unsupported,
-                "VeNCrypt requires RFB 3.7 or newer",
-            ));
-        }
-
-        if protocol_version == ProtocolVersion::V3_3 {
-            stream
-                .write_all(&u32::from(offered_security_type).to_be_bytes())
-                .await?;
+        let offered_security_types = security.security_types();
+        let selected_security_type = if protocol_version == ProtocolVersion::V3_3 {
+            let selected = if offered_security_types.contains(&SECURITY_TYPE_VNC_AUTH) {
+                SECURITY_TYPE_VNC_AUTH
+            } else {
+                offered_security_types[0]
+            };
+            if selected == SECURITY_TYPE_VENCRYPT {
+                stream.write_all(&0u32.to_be_bytes()).await?;
+                let reason = b"Encrypted servers require RFB 3.7 or newer";
+                let reason_length = u32::try_from(reason.len()).map_err(std::io::Error::other)?;
+                stream.write_all(&reason_length.to_be_bytes()).await?;
+                stream.write_all(reason).await?;
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::Unsupported,
+                    "VeNCrypt requires RFB 3.7 or newer",
+                ));
+            }
+            stream.write_all(&u32::from(selected).to_be_bytes()).await?;
+            selected
         } else {
-            stream.write_all(&[1, offered_security_type]).await?;
+            let count =
+                u8::try_from(offered_security_types.len()).map_err(std::io::Error::other)?;
+            stream.write_all(&[count]).await?;
+            stream.write_all(&offered_security_types).await?;
             let mut selected = [0u8; 1];
             stream.read_exact(&mut selected).await?;
-            if selected[0] != offered_security_type {
+            if !offered_security_types.contains(&selected[0]) {
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::InvalidData,
                     "client selected a security type that was not offered",
                 ));
             }
-        }
+            selected[0]
+        };
 
-        let mut stream: Box<dyn RfbStream> = match security {
-            SecurityConfig::None => {
+        let mut stream: Box<dyn RfbStream> = match selected_security_type {
+            SECURITY_TYPE_NONE => {
                 if protocol_version == ProtocolVersion::V3_8 {
                     stream.write_all(&SECURITY_RESULT_OK.to_be_bytes()).await?;
                 }
                 Box::new(stream)
             }
-            SecurityConfig::VeNCrypt { tls, password } => {
+            SECURITY_TYPE_VNC_AUTH => {
+                authenticate_vnc(
+                    &mut stream,
+                    security
+                        .legacy_password()
+                        .expect("legacy authentication was advertised with a password"),
+                    protocol_version,
+                )
+                .await?;
+                Box::new(stream)
+            }
+            SECURITY_TYPE_VENCRYPT => {
+                let SecurityConfig::VeNCrypt { tls, password, .. } = security else {
+                    unreachable!("VeNCrypt was advertised without TLS credentials")
+                };
                 stream.write_all(&[0, 2]).await?;
                 let mut version = [0u8; 2];
                 stream.read_exact(&mut version).await?;
@@ -606,6 +717,7 @@ impl VncClient {
                 }
                 Box::new(tls_stream)
             }
+            _ => unreachable!("selected security type was validated against the offered list"),
         };
 
         let mut shared = [0u8; 1];
@@ -2497,6 +2609,63 @@ mod tests {
         assert!(started.elapsed() < AUTH_FAILURE_DELAY);
     }
 
+    #[test]
+    fn computes_standard_vnc_auth_response() {
+        assert_eq!(
+            vnc_auth_response(
+                &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
+                "password",
+            ),
+            [
+                0xb8, 0x66, 0x92, 0x41, 0x25, 0xc8, 0xee, 0xbb, 0x9d, 0xeb, 0xc1, 0xdb, 0x61, 0xc5,
+                0x38, 0xe2,
+            ]
+        );
+    }
+
+    #[tokio::test]
+    async fn rfb_3_3_uses_legacy_auth_when_enabled() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let peer = tokio::spawn(async move {
+            let mut stream = TcpStream::connect(address).await.unwrap();
+            let mut version = [0; 12];
+            stream.read_exact(&mut version).await.unwrap();
+            stream.write_all(PROTOCOL_VERSION_3_3).await.unwrap();
+            let mut security_type = [0; 4];
+            stream.read_exact(&mut security_type).await.unwrap();
+            assert_eq!(u32::from_be_bytes(security_type), 2);
+            let mut challenge = [0; 16];
+            stream.read_exact(&mut challenge).await.unwrap();
+            stream
+                .write_all(&vnc_auth_response(&challenge, "legacy"))
+                .await
+                .unwrap();
+            let mut result = [0; 4];
+            stream.read_exact(&mut result).await.unwrap();
+            assert_eq!(result, [0; 4]);
+            stream.write_all(&[1]).await.unwrap();
+            let mut dimensions = [0; 4];
+            stream.read_exact(&mut dimensions).await.unwrap();
+            assert_eq!(dimensions, [0, 1, 0, 1]);
+        });
+        let (stream, _) = listener.accept().await.unwrap();
+        let (event_tx, _event_rx) = mpsc::unbounded_channel();
+        let security =
+            SecurityConfig::from_password_and_legacy_auth(Some("legacy".into()), true).unwrap();
+        let result = VncClient::new_with_security(
+            1,
+            stream,
+            Framebuffer::new(1, 1),
+            "test".into(),
+            security,
+            event_tx,
+        )
+        .await;
+        peer.await.unwrap();
+        assert!(result.is_ok());
+    }
+
     async fn connect_with_version(
         version: &[u8; 12],
     ) -> (VncClient, TcpStream, mpsc::UnboundedReceiver<ClientEvent>) {
@@ -2779,6 +2948,7 @@ mod tests {
         let security = SecurityConfig::VeNCrypt {
             tls: Arc::new(tls),
             password: "secret".into(),
+            legacy_auth: true,
         };
 
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -2788,9 +2958,9 @@ mod tests {
             let mut version = [0; 12];
             stream.read_exact(&mut version).await.unwrap();
             stream.write_all(PROTOCOL_VERSION_3_8).await.unwrap();
-            let mut offered = [0; 2];
+            let mut offered = [0; 3];
             stream.read_exact(&mut offered).await.unwrap();
-            assert_eq!(offered, [1, SECURITY_TYPE_VENCRYPT]);
+            assert_eq!(offered, [2, SECURITY_TYPE_VENCRYPT, SECURITY_TYPE_VNC_AUTH]);
             stream.write_all(&[SECURITY_TYPE_VENCRYPT]).await.unwrap();
             let mut vencrypt_version = [0; 2];
             stream.read_exact(&mut vencrypt_version).await.unwrap();
