@@ -36,9 +36,9 @@ Equivalent command-line trigger:
 gh workflow run Release --repo sarimabbas/vinny --ref main -f version=0.2.0
 ```
 
-The workflow rejects a version that does not match Cargo and the app plist, or one that has already been published. The build job has no release credentials. After approval, the signing job receives credentials but does not check out or run repository scripts.
+The workflow rejects a version that does not match Cargo and the app plist, or one that has already been published.
 
-Release archives, checksums, and tags are immutable. The Homebrew key can push a tap branch, but updating the cask still requires a pull request.
+Release archives, checksums, and tags are immutable. Updating the Homebrew cask requires a pull request.
 
 ## Verification
 
@@ -74,4 +74,4 @@ Once GitHub has created a release, do not reuse its version, replace its archive
 - If only the Homebrew branch or pull request fails, update the cask from the published archive. Do not rebuild the release.
 - If a published binary is wrong, publish a new patch version.
 
-`scripts/release.sh` is a local fallback for signing and notarizing an archive. The GitHub workflow is the official publication path.
+Use `scripts/release.sh` to sign and notarize a local archive. Publish releases through the GitHub workflow.
