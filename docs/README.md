@@ -1,9 +1,9 @@
 # Vinny documentation
 
-- [Contributing](CONTRIBUTING.md) — development setup, checks, and pull requests
-- [Releasing](RELEASING.md) — version preparation, signing, notarization, and Homebrew publication
-- [Security policy](SECURITY.md) — supported versions and private vulnerability reporting
-- [Threat model](threat-model.md) — trust boundaries, risks, and mitigations
-- [App icon](app-icon.md) — artwork sources and asset-generation guidance
+- [Contributing](CONTRIBUTING.md): setup, checks, and pull requests
+- [Releasing](RELEASING.md): versions, signing, notarization, and Homebrew
+- [Security policy](SECURITY.md): supported versions and vulnerability reports
+- [Threat model](threat-model.md): trust boundaries and known risks
+- [App icon](app-icon.md): source artwork and asset generation
 
-For installation, usage, and the project overview, return to the [main README](../README.md).
+Installation and usage are in the [main README](../README.md).

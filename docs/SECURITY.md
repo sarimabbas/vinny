@@ -2,18 +2,16 @@
 
 ## Supported versions
 
-Vinny is an early-stage project. Security fixes are provided for the latest published version only.
-
-The repository's security boundaries and prioritized risks are documented in [threat-model.md](threat-model.md).
+Security fixes are provided for the latest release only. See [threat-model.md](threat-model.md) for the trust boundaries and known risks.
 
 ## Reporting a vulnerability
 
-Please report vulnerabilities through [GitHub private vulnerability reporting](https://github.com/sarimabbas/vinny/security/advisories/new). Do not open a public issue for an undisclosed vulnerability.
+Report vulnerabilities through [GitHub private vulnerability reporting](https://github.com/sarimabbas/vinny/security/advisories/new). Do not open a public issue before a fix is available.
 
-Include the affected version, reproduction steps, impact, and any suggested mitigation. You should receive an initial response within seven days.
+Include the affected version, reproduction steps, impact, and suggested fix if you have one. Expect an initial response within seven days.
 
 ## Known security boundary
 
-Vinny defaults to an unauthenticated, plaintext loopback listener for compatibility. Each server can instead enable password-authenticated VeNCrypt/X509Plain over TLS. The certificate is self-signed and regenerated when the server is recreated, so viewers may require explicit certificate approval after a restart. Passwords are stored in the macOS Keychain rather than `UserDefaults`.
+The default listener is unauthenticated and bound to `127.0.0.1`. Encrypted servers use VeNCrypt/X509Plain, a Keychain-stored password, and a self-signed certificate. The certificate changes when the server is recreated, so the viewer may ask for approval again.
 
-Binding an unsecured server to another interface remains a user-controlled risk decision: anyone who can reach it can view the screen and, unless view-only mode is enabled, control input. Use Vinny's encrypted mode, a trusted network, or a secured tunnel such as Tailscale. Direct public-internet exposure remains unsupported.
+Anyone who can reach an unsecured listener can see the screen and, unless view-only mode is on, control the Mac. Use encrypted mode, a trusted network, or a secure tunnel such as Tailscale. Do not expose Vinny directly to the public internet.
