@@ -1,34 +1,34 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "https://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-  <key>CFBundleDisplayName</key>
-  <string>Vinny</string>
-  <key>CFBundleExecutable</key>
-  <string>vinny</string>
-  <key>CFBundleIdentifier</key>
-  <string>run.lil.vinny</string>
-  <key>CFBundleIconFile</key>
-  <string>Vinny</string>
-  <key>CFBundleInfoDictionaryVersion</key>
-  <string>6.0</string>
-  <key>CFBundleName</key>
-  <string>Vinny</string>
-  <key>CFBundlePackageType</key>
-  <string>APPL</string>
-  <key>CFBundleShortVersionString</key>
-  <string>0.2.1</string>
-  <key>CFBundleVersion</key>
-  <string>4</string>
-  <key>LSMinimumSystemVersion</key>
-  <string>12.3</string>
-  <key>LSMultipleInstancesProhibited</key>
-  <true/>
-  <key>LSUIElement</key>
-  <true/>
-  <key>NSHighResolutionCapable</key>
-  <true/>
-  <key>NSScreenCaptureUsageDescription</key>
-  <string>Vinny uses screen capture to show this Mac through a VNC connection you configure.</string>
+	<key>CFBundleDisplayName</key>
+	<string>Vinny</string>
+	<key>CFBundleExecutable</key>
+	<string>vinny</string>
+	<key>CFBundleIconFile</key>
+	<string>Vinny</string>
+	<key>CFBundleIdentifier</key>
+	<string>run.lil.vinny</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>Vinny</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>0.2.2</string>
+	<key>CFBundleVersion</key>
+	<string>5</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>12.3</string>
+	<key>LSMultipleInstancesProhibited</key>
+	<true/>
+	<key>LSUIElement</key>
+	<true/>
+	<key>NSHighResolutionCapable</key>
+	<true/>
+	<key>NSScreenCaptureUsageDescription</key>
+	<string>Vinny uses screen capture to show this Mac through a VNC connection you configure.</string>
 </dict>
 </plist>
