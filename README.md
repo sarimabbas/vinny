@@ -3,90 +3,51 @@
 [![CI](https://github.com/sarimabbas/vinny/actions/workflows/ci.yml/badge.svg)](https://github.com/sarimabbas/vinny/actions/workflows/ci.yml)
 [![Latest release](https://img.shields.io/github/v/release/sarimabbas/vinny)](https://github.com/sarimabbas/vinny/releases/latest)
 
-Vinny is a small VNC server for macOS. It captures configured displays with ScreenCaptureKit, serves them through standard RFB, and forwards keyboard and pointer events through macOS input APIs.
-
-Vinny is a menu-bar app. Open it, grant Screen Recording and Accessibility once, then connect any VNC client. The default server listens only on `127.0.0.1:5900`.
+Vinny is a small VNC server for macOS. It runs in the menu bar and lets you choose a display, capture size, frame rate, and whether viewers can control the Mac.
 
 ## Install
 
-Install with Homebrew:
+Requires macOS 12.3 or newer. The published download is for Apple silicon (ARM64). For other architectures, see the [build instructions](docs/CONTRIBUTING.md#development).
+
+With Homebrew:
 
 ```bash
 brew install --cask sarimabbas/tap/vinny
 ```
 
-Then open Vinny from Applications.
+Or [download v0.2.4 for Apple silicon](https://github.com/sarimabbas/vinny/releases/download/v0.2.4/vinny-0.2.4-macos-arm64.zip), unzip it, and move `Vinny.app` to Applications. [Release notes and checksums](https://github.com/sarimabbas/vinny/releases/latest).
 
-## Build
+## Connect
 
-Requires macOS 12.3+, Xcode, and Rust 1.90.
+Open Vinny and grant Screen Recording and Accessibility. Choose a display and enable the server. Both permissions are required for it to start.
 
-```bash
-cargo build
-./scripts/package.sh
-open dist/Vinny.app
-```
+The default listener is `127.0.0.1:5900`. To connect from another computer, follow the [connection guide](docs/first-connection.md).
 
-The app asks for Screen Recording and Accessibility access. Enabled servers start after both permissions are granted. New servers use the next free port starting at `5900`.
+[Settings reference](docs/share-selected-display.md) covers the server controls. The [Tailscale guide](docs/tailscale.md) covers direct access and Serve. Closing the window leaves the servers running; quit Vinny to stop them.
 
-Vinny appears in the Dock while its window is open. Closing the window hides the Dock icon but leaves the servers running.
+## Connection security
 
-## Package locally
+Vinny defaults to an **unauthenticated loopback listener**. For access from another computer, use the [SSH tunnel](docs/first-connection.md), or configure encrypted connections with a compatible viewer.
 
-For an ad-hoc signed development build:
+**Encrypted + password** supports VeNCrypt/X509Plain, including TigerVNC. Vinny creates a self-signed certificate when a server starts. Its fingerprint changes when the server is recreated, so use an authenticated tunnel when you need a stable, verified endpoint.
 
-```bash
-./scripts/package.sh
-```
+The optional **Legacy authentication (unencrypted)** setting allows legacy VNC clients such as macOS Screen Sharing. It limits passwords to eight bytes and does **not** encrypt screen contents or input. Use it through a secure tunnel. View-only access still exposes screen and outgoing clipboard contents.
 
-For a Developer ID build:
-
-```bash
-SIGN_IDENTITY='Developer ID Application: …' ./scripts/package.sh
-```
-
-To sign, notarize, staple, and archive a release with the default `developer-notary` keychain profile:
-
-```bash
-SIGN_IDENTITY='Developer ID Application: …' ./scripts/release.sh
-```
-
-Set `NOTARY_PROFILE` to use a differently named keychain profile. The archive and its SHA-256 checksum are written to `dist/`.
-
-Keep the Developer ID identity and `run.lil.vinny` bundle identifier stable. macOS ties privacy grants to that identity.
-
-## Smoke test
-
-After packaging and granting permissions:
-
-```bash
-./scripts/smoke.sh
-```
-
-The smoke launches `Vinny.app`, verifies that port 5900 is loopback-only, completes an RFB 3.8 handshake, requests a framebuffer, and confirms captured pixels are non-empty.
-
-## Capabilities
-
-Each server configuration selects a display, maximum width, frame rate, address, port, sharing policy, and whether remote control or encryption is enabled. Settings persist between launches.
-
-Vinny supports RFB 3.3 through 3.8, common framebuffer encodings, framebuffer resizing, cursor metadata, extended key events, and clipboard sync. Encrypted servers can optionally accept legacy VNC authentication for macOS Screen Sharing. Capture and input account for Retina scaling. Handshakes time out after 10 seconds, and each server accepts at most eight clients.
-
-> [!WARNING]
-> Vinny defaults to an unauthenticated loopback listener. Enable “Encrypted + password” before exposing a listener when your VNC viewer supports VeNCrypt/X509Plain. Legacy VNC authentication protects access with a password but does not encrypt screen contents or input. Otherwise use a trusted network or secure tunnel. View-only mode blocks remote input but still exposes screen contents.
-
-TigerVNC supports encrypted connections. macOS Screen Sharing requires the optional legacy authentication setting.
+See the [threat model](docs/threat-model.md) and [security policy](docs/SECURITY.md).
 
 ## Implementation
 
+Vinny captures displays with ScreenCaptureKit, serves them over standard RFB, and forwards keyboard and pointer events through macOS input APIs. Capture and input account for Retina scaling.
+
+It supports RFB 3.3 through 3.8, common framebuffer encodings, framebuffer resizing, cursor metadata, extended key events, and clipboard sync. Each server accepts at most eight clients, with a 10-second handshake timeout.
+
 - [`screencapturekit`](https://crates.io/crates/screencapturekit): MIT/Apache-2.0 capture bindings
-- [`rustvncserver`](https://crates.io/crates/rustvncserver): Apache-2.0 RFB server
+- [`rustvncserver`](https://crates.io/crates/rustvncserver): Apache-2.0 RFB server, vendored at 2.2.1
 - [`enigo`](https://crates.io/crates/enigo): MIT input injection
 
-Vinny uses the `rustvncserver` 2.2.1 source in `vendor/rustvncserver`.
+## Development and documentation
 
-## Documentation
-
-Development, release, security, and design documentation is indexed in [`docs/`](docs/README.md).
+[Build, package, and smoke test](docs/CONTRIBUTING.md) · [Release and notarize](docs/RELEASING.md) · [All documentation](docs/README.md)
 
 ## License
 

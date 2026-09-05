@@ -9,7 +9,7 @@
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
     <meta name="description" content="Vinny is a small native VNC server for macOS." />
     <meta property="og:title" content="Vinny — VNC for macOS" />
-    <meta property="og:description" content="Native capture. Loopback by default. No account, no cloud." />
+    <meta property="og:description" content="Vinny is a small native VNC server for macOS." />
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://vinny.lil.run/" />
     <meta property="og:image" content="https://vinny.lil.run/assets/vinny-jump-world.png" />
@@ -20,6 +20,7 @@
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:image" content="https://vinny.lil.run/assets/vinny-jump-world.png" />
     <meta name="twitter:image:alt" content="Vinny jumping through a glowing blue and purple VNC world" />
+    <link rel="canonical" href="https://vinny.lil.run/" />
     <title>Vinny — VNC for macOS</title>
   </head>
   <body>
@@ -35,11 +36,15 @@
             <canvas id="vinny-canvas"></canvas>
           </section>
 
-          <section class="terminal" aria-label="Vinny Homebrew installation command">
+          <section class="terminal" id="get-connected" aria-label="Vinny Homebrew installation command">
             <div class="terminal-bar"><i></i><i></i><i></i><span>Terminal</span></div>
             <pre><code><span class="shell-command">brew</span> <span class="shell-action">install</span> <span class="shell-flag">--cask</span> <span class="shell-package">sarimabbas/tap/vinny</span></code></pre>
           </section>
 
+          <nav class="install-links" aria-label="Installation">
+            <a href="https://github.com/sarimabbas/vinny/releases/download/v0.2.4/vinny-0.2.4-macos-arm64.zip">Download for Apple silicon</a>
+            <a href="/guides/connection/">Connection guide</a>
+          </nav>
           <a class="github" href="https://github.com/sarimabbas/vinny">
             <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
               <path d="M12 .3a12 12 0 0 0-3.8 23.4c.6.1.8-.3.8-.6v-2.2c-3.3.7-4-1.4-4-1.4-.5-1.4-1.3-1.8-1.3-1.8-1.1-.7.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1.1 1.8 2.8 1.3 3.5 1 .1-.8.4-1.3.8-1.6-2.7-.3-5.5-1.3-5.5-5.9 0-1.3.5-2.4 1.2-3.2-.1-.3-.5-1.5.1-3.2 0 0 1-.3 3.3 1.2a11.5 11.5 0 0 1 6 0c2.3-1.5 3.3-1.2 3.3-1.2.7 1.7.2 2.9.1 3.2.8.8 1.2 1.9 1.2 3.2 0 4.6-2.8 5.6-5.5 5.9.4.4.8 1.1.8 2.2v3.3c0 .3.2.7.8.6A12 12 0 0 0 12 .3Z"/>
@@ -52,7 +57,8 @@
 
     <section class="docs" aria-labelledby="docs-title">
       <div class="docs-inner">
-        <h2 id="docs-title">App <span class="heading-quote">“</span>screen<span class="heading-quote">”</span>-shot</h2>
+        <h2 id="docs-title">App preview</h2>
+        <p class="preview-note">Try the settings here.</p>
 
         <div class="how-stage">
           <section class="app-window" aria-label="Interactive Vinny app preview">
@@ -85,7 +91,7 @@
 
               <div class="server-heading">
                 <h4>Servers</h4>
-                <button class="add-button" type="button">Add server</button>
+                <button class="add-button" type="button" disabled title="Available in the app">Add server</button>
               </div>
 
               <form class="server-card" id="server-card">
@@ -181,7 +187,7 @@
                 </div>
 
                 <div class="server-actions">
-                  <button class="remove-button" type="button">Remove</button>
+                  <button class="remove-button" type="button" disabled title="Available in the app">Remove</button>
                   <button class="apply-button" id="apply-server" type="button">Apply &amp; restart</button>
                 </div>
               </form>
@@ -189,7 +195,7 @@
           </section>
 
           <aside class="pip-preview" id="pip-preview" aria-hidden="true">
-            <div class="pip-bar"><span></span><b>Live</b><code id="pip-address">127.0.0.1:5900</code></div>
+            <div class="pip-bar"><span></span><b>Preview</b><code id="pip-address">127.0.0.1:5900</code></div>
             <div class="pip-desktop">
               <div class="pip-menu"><i></i><i></i><i></i></div>
               <div class="pip-window">
@@ -202,6 +208,13 @@
         </div>
       </div>
     </section>
+
+    <nav class="guide-index" id="guides-title" aria-label="Documentation">
+      <a href="/guides/connection/">Connection guide</a>
+      <a href="/guides/settings/">Settings reference</a>
+      <a href="/guides/vinny-vs-screen-sharing/">Vinny vs macOS Screen Sharing</a>
+      <a href="/guides/tailscale/">Tailscale guide</a>
+    </nav>
 
     <footer class="site-footer">
       <div class="footer-inner">

@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="Connect a VNC client to Vinny using SSH, Tailscale, or a direct connection." />
+  <link rel="canonical" href="https://vinny.lil.run/guides/connection/" />
+  <link rel="icon" href="/favicon-32.png" />
+  <link rel="stylesheet" href="/src/style.css" />
+  <title>Connection guide | Vinny</title>
+</head>
+<body>
+<main class="guide-page">
+  <nav class="guide-nav" aria-label="Guide navigation"><a href="/">vinny</a></nav>
+  <article>
+<h1>Connection guide</h1>
+<p>Vinny runs on the Mac you want to share. On the other device, use a VNC client to view and control it.</p>
+<h2>Choose a client</h2>
+<p><a href="https://tigervnc.org/">TigerVNC</a> is one option. <a href="https://remmina.org/remmina-vnc/">Remmina</a> provides a VNC client on Linux, and macOS includes <a href="https://support.apple.com/guide/mac-help/mh11848/mac">Screen Sharing</a>. Other VNC clients can work when they support the authentication mode you choose below.</p>
+<p>The address format varies by client. Some have separate host and port fields; TigerVNC uses two colons before an explicit port.</p>
+<h2>Prepare Vinny</h2>
+<p><a href="/#get-connected">Install Vinny</a>, open it, and grant Screen Recording and Accessibility. Choose a display, keep <strong>Listen on</strong> at <code>127.0.0.1:5900</code>, enable the server, and choose <strong>Apply &amp; restart</strong>. Confirm its status is listening.</p>
+<p>For access from another device, choose a route:</p>
+<ul>
+<li><strong>Tailscale:</strong> connect your devices to a private network, then reach Vinny directly by its MagicDNS name or through Serve. Follow the <a href="/guides/tailscale/">Tailscale guide</a>. No SSH session is needed.</li>
+<li><strong>SSH:</strong> forward a local port from your viewing computer to the Mac. The steps are below.</li>
+<li><strong>Direct connection:</strong> bind Vinny to an IP address the viewer can reach and allow that port through the Mac's firewall. Use a client that supports Vinny's VeNCrypt/X509Plain mode with <strong>Encrypted + password</strong>. See the <a href="/guides/settings/">settings reference</a> for authentication and certificate details.</li>
+</ul>
+<h2>Choose authentication</h2>
+<p>For SSH or Tailscale, a client that accepts VNC security type <strong>None</strong> can use Vinny with <strong>Encrypted + password</strong> off. The tunnel protects traffic between devices. Local processes can still reach the unauthenticated listener; with Tailscale Serve, anyone permitted to reach the served port can connect.</p>
+<p>For Apple's Screen Sharing or another client that requires a VNC password, turn on <strong>Encrypted + password</strong>, then <strong>Legacy authentication (unencrypted)</strong>, and set a password of 1–8 bytes. Use this mode through SSH or Tailscale: legacy VNC does not encrypt the desktop or input. Choose <strong>Apply &amp; restart</strong> after changing authentication.</p>
+<h2>Connect over SSH</h2>
+<p>On the shared Mac, enable <strong>Remote Login</strong> in System Settings → General → Sharing and allow your account. Use the account and host shown there. <a href="https://support.apple.com/guide/mac-help/mchlp1066/mac">Apple's Remote Login instructions</a> cover older macOS versions too.</p>
+<p>On the viewing computer, replace <code>YOUR_USER</code> and <code>YOUR_MAC</code> and run:</p>
+<pre><code>ssh -N -o ExitOnForwardFailure=yes -L 127.0.0.1:15900:127.0.0.1:5900 YOUR_USER@YOUR_MAC</code></pre>
+<p>Check the SSH host identity on the first connection and sign in with your Mac account's SSH credentials. Leave the terminal open. The Mac must already be reachable from this computer.</p>
+<p>In your VNC client, connect to host <code>127.0.0.1</code>, port <code>15900</code>:</p>
+<ul>
+<li><strong>TigerVNC:</strong> enter <code>127.0.0.1::15900</code>. Its <a href="https://tigervnc.org/doc/vncviewer.html">viewer manual</a> describes the address syntax and security options.</li>
+<li><strong>macOS Screen Sharing:</strong> in Finder, choose Go → Connect to Server and enter <code>vnc://127.0.0.1:15900</code>. Use the legacy password configured in Vinny, not your Mac login password.</li>
+<li><strong>Other clients:</strong> select VNC, then enter the host and port in the client's connection fields. Match its security mode to Vinny's settings.</li>
+</ul>
+<p>You should see the selected display. Check pointer movement and typing. For view-only access, turn off <strong>Allow keyboard and mouse</strong>, apply, and reconnect.</p>
+<p>To finish, close the viewer and press Control-C in the SSH terminal. Quit Vinny or disable its server to stop sharing locally too.</p>
+<h2>Troubleshooting</h2>
+<ul>
+<li><strong>Server will not start:</strong> check both macOS permissions and the error on the server card.</li>
+<li><strong>Port already in use:</strong> if another app uses <code>5900</code> on the Mac, change Vinny's port and the final <code>:5900</code> in the SSH command. If the viewing computer's <code>15900</code> is occupied, change it in both the command and viewer.</li>
+<li><strong>Connection refused or timed out:</strong> check that the Mac is awake, Vinny is listening, and your SSH tunnel or Tailscale Serve is running. The default loopback listener cannot be reached directly using the Mac's network IP.</li>
+<li><strong>No matching security types:</strong> use None for an unauthenticated tunnel connection, legacy VNC password authentication for Screen Sharing, or VeNCrypt/X509Plain for Vinny's TLS mode.</li>
+<li><strong>Picture works but input does not:</strong> check Accessibility and <strong>Allow keyboard and mouse</strong>.</li>
+</ul>
+<p>Changes to a running server restart the listener. Reconnect after applying them.</p>
+  </article>
+</main>
+</body>
+</html>
