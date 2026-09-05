@@ -8,6 +8,21 @@ permissions:
   contents: read
 
 jobs:
+  website-and-growth:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install website dependencies
+        working-directory: website
+        run: npm ci
+      - name: Build website and guides
+        working-directory: website
+        run: npm run build
+      - name: Test growth snapshots
+        run: python3 -m unittest discover -s scripts -p 'test_growth*.py'
+
   rust:
     runs-on: macos-26
     steps:

@@ -1,0 +1,54 @@
+name: Connection report
+description: Report an installation or first-connection problem.
+title: "Connection report: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Tell us where setup stopped so we can improve it. Issues are public. Do not include passwords, private addresses, hostnames, personal screen contents, or unreviewed logs.
+  - type: input
+    id: version
+    attributes:
+      label: Vinny version and installation method
+      placeholder: "Version shown in About, Homebrew or release download"
+    validations:
+      required: true
+  - type: input
+    id: mac
+    attributes:
+      label: macOS version and chip architecture
+      placeholder: "macOS version, Apple silicon or Intel"
+    validations:
+      required: true
+  - type: input
+    id: viewer
+    attributes:
+      label: VNC viewer, version, and operating system
+    validations:
+      required: true
+  - type: dropdown
+    id: step
+    attributes:
+      label: Where did setup stop?
+      options:
+        - Installation or opening Vinny
+        - macOS permissions
+        - Listener configuration
+        - Connecting or authentication
+        - Desktop capture
+        - Keyboard or pointer input
+        - Another step
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: What did you try, and what happened?
+      description: Include the guide you followed, connection method, expected result, and exact error text with private details removed.
+    validations:
+      required: true
+  - type: textarea
+    id: goal
+    attributes:
+      label: What were you hoping to use Vinny for?
+      description: Optional. This helps us understand which workflow needs attention.

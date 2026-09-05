@@ -29,6 +29,7 @@
 7. Wait for the unprivileged `build` job to pass, then approve the protected `release` environment deployment.
 8. Confirm that signing, notarization, and GitHub publishing succeed.
 9. Open the Homebrew pull-request link from the workflow summary. Review and merge it to publish the cask update.
+10. After the release archive is published successfully, open a documentation pull request updating the pinned ARM64 download version and asset URL in `README.md` and `website/index.html`. Check any guide links to the archive too. Verify that each URL points to the published asset before merging. Do not update these links ahead of publication: versioned filenames have no stable download alias.
 
 Equivalent command-line trigger:
 
@@ -75,3 +76,15 @@ Once GitHub has created a release, do not reuse its version, replace its archive
 - If a published binary is wrong, publish a new patch version.
 
 Use `scripts/release.sh` to sign and notarize a local archive. Publish releases through the GitHub workflow.
+
+## Local release archive
+
+To sign, notarize, staple, and archive a release with the default `developer-notary` keychain profile:
+
+```bash
+SIGN_IDENTITY='Developer ID Application: …' ./scripts/release.sh
+```
+
+Set `NOTARY_PROFILE` to use a differently named keychain profile. The archive and its SHA-256 checksum are written to `dist/`. Keep the Developer ID identity and `run.lil.vinny` bundle identifier stable so macOS privacy grants remain associated with the app.
+
+Use the protected GitHub workflow above to publish releases.

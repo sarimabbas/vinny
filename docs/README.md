@@ -1,9 +1,18 @@
 # Vinny documentation
 
-- [Contributing](CONTRIBUTING.md): setup, checks, and pull requests
+## Using Vinny
+
+- [Install](../README.md#install): Homebrew or the Apple Silicon download
+- [First connection with TigerVNC](first-connection.md): permissions, SSH tunnel, and troubleshooting
+- [Share a selected display](share-selected-display.md): capture settings, multiple listeners, and view-only access
+- [Vinny vs built-in Screen Sharing](vinny-vs-screen-sharing.md): choosing based on your workflow
+- [Connection security](../README.md#connection-security): encrypted and legacy connections
+
+## Developing Vinny
+
+- [Contributing](CONTRIBUTING.md): setup, local packaging, checks, and pull requests
 - [Releasing](RELEASING.md): versions, signing, notarization, and Homebrew
 - [Security policy](SECURITY.md): supported versions and vulnerability reports
 - [Threat model](threat-model.md): trust boundaries and known risks
 - [App icon](app-icon.md): source artwork and asset generation
-
-Installation and usage are in the [main README](../README.md).
+- [Adoption and launch kit](growth/README.md): growth snapshots, launch drafts, demo recording, and tester protocol

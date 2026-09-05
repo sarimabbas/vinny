@@ -864,6 +864,10 @@ private final class VinnyAppDelegate: NSObject, NSApplicationDelegate, NSWindowD
         statusItem.button?.toolTip = "Vinny"
         let menu = NSMenu()
         menu.addItem(withTitle: "Show Vinny", action: #selector(showWindow), keyEquivalent: "")
+        let guideItem = menu.addItem(withTitle: "Connection Guide", action: #selector(openConnectionGuide), keyEquivalent: "")
+        guideItem.target = self
+        let aboutItem = menu.addItem(withTitle: "About Vinny", action: #selector(showAbout), keyEquivalent: "")
+        aboutItem.target = self
         menu.addItem(.separator())
         menu.addItem(withTitle: "Quit Vinny", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         statusItem.menu = menu
@@ -891,6 +895,20 @@ private final class VinnyAppDelegate: NSObject, NSApplicationDelegate, NSWindowD
         NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
         window?.makeKeyAndOrderFront(nil)
+    }
+
+    @objc private func openConnectionGuide() {
+        guard let url = URL(string: "https://github.com/sarimabbas/vinny/blob/main/docs/first-connection.md") else { return }
+        NSWorkspace.shared.open(url)
+    }
+
+    @objc private func showAbout() {
+        NSApp.activate(ignoringOtherApps: true)
+        let credits = NSMutableAttributedString(string: "Open-source VNC for macOS.\n\n")
+        if let url = URL(string: "https://github.com/sarimabbas/vinny") {
+            credits.append(NSAttributedString(string: "Star on GitHub", attributes: [.link: url]))
+        }
+        NSApp.orderFrontStandardAboutPanel(options: [.credits: credits])
     }
 
     private func registerFonts() {
