@@ -33,7 +33,7 @@ For app-level changes, also run:
 ./scripts/smoke.sh
 ```
 
-The smoke test requires Screen Recording and Accessibility permission for the packaged app. It launches `Vinny.app`, verifies that port 5900 is loopback-only, completes an RFB 3.8 handshake, requests a framebuffer, and confirms captured pixels are non-empty.
+The smoke test requires Screen Recording and Accessibility permission for the packaged app. It launches `Vinny.app`, verifies that port `5900` is loopback-only, completes an RFB 3.8 handshake, requests a framebuffer, and confirms captured pixels are non-empty.
 
 ### Package locally
 

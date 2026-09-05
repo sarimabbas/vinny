@@ -24,7 +24,7 @@ Run these commands on the Mac running Vinny. If `tailscale` is not found, use th
 alias tailscale="/Applications/Tailscale.app/Contents/MacOS/Tailscale"
 ```
 
-Check existing Serve mappings, then add the VNC forwarder if port 5900 is free:
+Check existing Serve mappings, then add the VNC forwarder if port `5900` is free:
 
 ```bash
 tailscale serve status
@@ -46,7 +46,7 @@ Both options use the Mac's Tailscale IP or MagicDNS name, with port `5900`. For 
 - **macOS Screen Sharing:** in Finder → Go → Connect to Server, enter `vnc://YOUR_MAC:5900` and use Vinny's legacy VNC password.
 - **Other VNC clients:** host `YOUR_MAC`, port `5900`, with authentication matching Vinny.
 
-Replace `YOUR_MAC` with the actual Tailscale address. If another Serve mapping already uses port 5900, use `--tcp=15900` instead and connect your viewer to port 15900. The destination can remain `127.0.0.1:5900`.
+Replace `YOUR_MAC` with the actual Tailscale address. If another Serve mapping already uses port `5900`, use `--tcp=15900` instead and connect your viewer to port `15900`. The destination can remain `127.0.0.1:5900`.
 
 ## Stop sharing
 

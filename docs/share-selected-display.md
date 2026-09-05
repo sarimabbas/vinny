@@ -42,7 +42,7 @@ See the [security model](threat-model.md) for details.
 
 **Listen on** takes an IPv4 or IPv6 address. `127.0.0.1` accepts connections only on this Mac. Binding to a network address makes the listener reachable on that interface, subject to firewall rules. `0.0.0.0` listens on all IPv4 interfaces.
 
-Ports range from 1–65535. The default is `5900`. New configurations choose the next unused configured port, but another application may already occupy it.
+Ports range from `1`–`65535`. The default is `5900`. New configurations choose the next unused configured port, but another application may already occupy it.
 
 ## Add or remove a server
 
