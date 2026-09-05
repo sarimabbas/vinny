@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url><loc>https://vinny.lil.run/</loc></url>
-  <url><loc>https://vinny.lil.run/guides/tigervnc-ssh/</loc></url>
-  <url><loc>https://vinny.lil.run/guides/share-selected-display/</loc></url>
+  <url><loc>https://vinny.lil.run/guides/connection/</loc></url>
+  <url><loc>https://vinny.lil.run/guides/settings/</loc></url>
   <url><loc>https://vinny.lil.run/guides/vinny-vs-screen-sharing/</loc></url>
+  <url><loc>https://vinny.lil.run/guides/tailscale/</loc></url>
 </urlset>

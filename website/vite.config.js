@@ -8,8 +8,11 @@ export default defineConfig({
     rollupOptions: {
       input: {
         main: entry("./index.html"),
-        connection: entry("./guides/tigervnc-ssh/index.html"),
-        display: entry("./guides/share-selected-display/index.html"),
+        connection: entry("./guides/connection/index.html"),
+        legacyConnection: entry("./guides/tigervnc-ssh/index.html"),
+        settings: entry("./guides/settings/index.html"),
+        legacyDisplay: entry("./guides/share-selected-display/index.html"),
+        tailscale: entry("./guides/tailscale/index.html"),
         comparison: entry("./guides/vinny-vs-screen-sharing/index.html"),
       },
     },

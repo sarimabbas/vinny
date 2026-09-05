@@ -21,9 +21,9 @@ Or [download v0.2.4 for Apple silicon](https://github.com/sarimabbas/vinny/relea
 
 Open Vinny and grant Screen Recording and Accessibility. Choose a display and enable the server. Both permissions are required for it to start.
 
-The default listener is `127.0.0.1:5900`. To connect from another computer, follow the [TigerVNC over SSH guide](docs/first-connection.md).
+The default listener is `127.0.0.1:5900`. To connect from another computer, follow the [connection guide](docs/first-connection.md).
 
-[Display settings](docs/share-selected-display.md) covers multiple listeners and view-only access. Closing the window leaves the servers running; quit Vinny to stop them.
+[Settings reference](docs/share-selected-display.md) covers the server controls. The [Tailscale guide](docs/tailscale.md) covers private access through Serve. Closing the window leaves the servers running; quit Vinny to stop them.
 
 ## Connection security
 

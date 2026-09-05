@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="Connect to Vinny privately with Tailscale Serve." />
+  <link rel="canonical" href="https://vinny.lil.run/guides/tailscale/" />
+  <link rel="icon" href="/favicon-32.png" />
+  <link rel="stylesheet" href="/src/style.css" />
+  <title>Tailscale guide | Vinny</title>
+</head>
+<body>
+<main class="guide-page">
+  <nav class="guide-nav" aria-label="Guide navigation"><a href="/">vinny</a><a href="/#guides-title">Documentation</a></nav>
+  <article>
+<h1>Tailscale guide</h1>
+<p>Tailscale connects your devices over an encrypted private network. <a href="https://tailscale.com/docs/features/tailscale-serve">Serve</a> can forward a port on that network to Vinny's localhost listener.</p>
+<h2>Connect your devices</h2>
+<p>Install <a href="https://tailscale.com/download">Tailscale</a> on the shared Mac and the viewing device, and connect both to your tailnet. Check that your tailnet access rules allow the viewing device to reach the Mac on TCP port <code>5900</code>.</p>
+<p>Open Vinny, grant its permissions, and enable a server on <code>127.0.0.1:5900</code>. Choose a VNC authentication mode from the <a href="/guides/connection/">connection guide</a>. For Apple's Screen Sharing, enable the legacy password option.</p>
+<h2>Forward the port with Serve</h2>
+<p>Run these commands on the Mac running Vinny. If <code>tailscale</code> is not found, use the <a href="https://tailscale.com/docs/reference/tailscale-cli?tab=macos">macOS CLI setup</a>. For the app installed at <code>/Applications/Tailscale.app</code>, you can use this alias in your terminal:</p>
+<pre><code>alias tailscale=&quot;/Applications/Tailscale.app/Contents/MacOS/Tailscale&quot;</code></pre>
+<p>Check existing Serve mappings, then add the VNC forwarder if port 5900 is free:</p>
+<pre><code>tailscale serve status
+tailscale serve --bg --tcp=5900 tcp://127.0.0.1:5900
+tailscale serve status</code></pre>
+<p>This is a raw TCP forwarder, as described in the <a href="https://tailscale.com/docs/reference/tailscale-cli/serve">Serve command reference</a>. Tailscale encrypts transport between devices. <code>--bg</code> keeps the mapping running after you close the terminal and across Tailscale restarts. Vinny must still be running.</p>
+<p>If Serve prints a setup URL, follow it to enable the required tailnet features. Tailscale's <a href="https://tailscale.com/docs/features/tailscale-serve">Serve setup documentation</a> lists HTTPS certificates as a prerequisite. The VNC client still uses TCP, not an HTTPS address.</p>
+<p>Use Serve here, not Funnel, which publishes services to the internet. Tailnet access rules apply to Serve. With Vinny authentication off, anyone those rules allow to reach this port can view the desktop.</p>
+<h2>Connect your viewer</h2>
+<p>Use the Mac's Tailscale IP or DNS name shown in Serve's output, with port <code>5900</code>. Connect from the other device, not from the Mac serving Vinny.</p>
+<ul>
+<li><strong>TigerVNC:</strong> <code>YOUR_MAC::5900</code></li>
+<li><strong>macOS Screen Sharing:</strong> in Finder → Go → Connect to Server, enter <code>vnc://YOUR_MAC:5900</code> and use Vinny's legacy VNC password.</li>
+<li><strong>Other VNC clients:</strong> host <code>YOUR_MAC</code>, port <code>5900</code>, with authentication matching Vinny.</li>
+</ul>
+<p>Replace <code>YOUR_MAC</code> with the actual Tailscale address. If another Serve mapping already uses port 5900, use <code>--tcp=15900</code> instead and connect your viewer to port 15900. The destination can remain <code>127.0.0.1:5900</code>.</p>
+<h2>Why this helps with firewalls</h2>
+<p>Serve receives the tailnet connection and makes a local connection to Vinny. Vinny can stay on <code>127.0.0.1</code>, avoiding the need for a direct inbound connection to its LAN listener. This can help when macOS blocks inbound connections to Vinny.</p>
+<p>Tailscale itself still needs to connect, and Serve does not bypass tailnet access rules or every host security product. Router port forwarding is usually unnecessary; Tailscale can use relays when a direct connection is unavailable. See <a href="https://tailscale.com/docs/reference/faq/firewall-ports">Tailscale's firewall guidance</a>.</p>
+<p>If it fails, check that both devices are online in Tailscale, inspect <code>tailscale serve status</code>, and confirm Vinny is listening on the local destination port. An authentication error means you reached a VNC server; check the client and Vinny security settings next.</p>
+<h2>Stop sharing</h2>
+<p>Remove this mapping with:</p>
+<pre><code>tailscale serve --bg --tcp=5900 off</code></pre>
+<p>Use the external port you chose if it differs. This leaves other Serve mappings intact. Disable the Vinny server as well if you want to stop local access.</p>
+  </article>
+</main>
+</body>
+</html>

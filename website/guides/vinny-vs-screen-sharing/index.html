@@ -1,7 +1,24 @@
 <!doctype html>
-<html lang="en"><head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="description" content="Using macOS Screen Sharing with Vinny." /><link rel="canonical" href="https://vinny.lil.run/guides/vinny-vs-screen-sharing/" /><link rel="icon" href="/favicon-32.png" /><link rel="stylesheet" href="/src/style.css" /><title>About macOS Screen Sharing | Vinny</title></head><body><main class="guide-page"><nav class="guide-nav" aria-label="Guide navigation"><a href="/">vinny</a><a href="/#guides-title">Documentation</a></nav><article><h1>About macOS Screen Sharing</h1>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="Vinny and built-in macOS Screen Sharing." />
+  <link rel="canonical" href="https://vinny.lil.run/guides/vinny-vs-screen-sharing/" />
+  <link rel="icon" href="/favicon-32.png" />
+  <link rel="stylesheet" href="/src/style.css" />
+  <title>Vinny vs macOS Screen Sharing | Vinny</title>
+</head>
+<body>
+<main class="guide-page">
+  <nav class="guide-nav" aria-label="Guide navigation"><a href="/">vinny</a><a href="/#guides-title">Documentation</a></nav>
+  <article>
+<h1>Vinny vs macOS Screen Sharing</h1>
 <p>macOS includes <a href="https://support.apple.com/guide/mac-help/mh11848/mac">Screen Sharing</a>. You do not need Vinny for ordinary Mac-to-Mac screen sharing.</p>
 <p>Vinny provides per-listener settings for the display, capture width, frame rate, port, and remote input. It shares the logged-in desktop; it does not create separate user sessions or virtual displays.</p>
-<p>Apple's Screen Sharing viewer can connect to Vinny using <strong>Legacy authentication (unencrypted)</strong>. This does not encrypt screen contents or input. Use a secure tunnel. The <a href="/guides/tigervnc-ssh/">connection guide</a> uses TigerVNC over SSH.</p>
+<p>Apple's Screen Sharing viewer can connect to Vinny using <strong>Legacy authentication (unencrypted)</strong>. This does not encrypt screen contents or input. Use a secure tunnel. The <a href="/guides/connection/">connection guide</a> covers clients and secure connection options.</p>
 <p>If built-in Screen Sharing already uses port <code>5900</code>, choose another port in Vinny and update the tunnel destination to match.</p>
-</article></main></body></html>
+  </article>
+</main>
+</body>
+</html>

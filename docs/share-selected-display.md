@@ -1,39 +1,49 @@
-# Display settings
+# Settings reference
 
-Vinny lets each server configuration capture one connected display. You can give separate displays their own ports, capture settings, and remote-control policy.
+Each server has its own display, port, and settings. Changes take effect when you choose **Apply & restart**, which disconnects existing viewers.
 
-First complete the [TigerVNC connection guide](first-connection.md). The steps below keep the same SSH-tunnel setup.
+## Enabled
 
-## Choose what to share
+Starts or stops the listener. New servers start disabled. Closing Vinny's window leaves enabled servers running; quitting the app stops them.
 
-1. Open Vinny from its menu-bar icon.
-2. In the server card, open **Display** and select the monitor you want to share. Labels include the display name.
-3. Set **Maximum width** and **Frame rate** for the capture. Vinny accepts widths from 320 to 7680 and frame rates from 1 to 60. Start with the defaults of 1920 and 20.
-4. Choose **Apply & restart**, then reconnect your viewer.
-5. Move a window on the selected display and confirm you see the same movement remotely.
+## Display
 
-Maximum width changes the captured image size. It does not change the Mac's display resolution or create a virtual display. Reducing width or frame rate can reduce the amount of image data you ask Vinny to capture and send.
+Select the connected display to share. Viewers see everything on that display, including notifications. Check the selection again after unplugging or rearranging monitors.
 
-## Give another display its own connection
+## Maximum width and frame rate
 
-Add a server in Vinny, choose the other display, and note its port. New configurations use the next unused configured port starting at `5900`, but another application may already be using that port.
+**Maximum width** limits the captured image width, preserving its aspect ratio. It accepts 320–7680 pixels and does not upscale a smaller display. It does not change the Mac's display resolution.
 
-Keep **Listen on** at `127.0.0.1`. New servers start disabled: turn **Enabled** on and choose **Apply & restart**. For a second server on `5901`, open a second tunnel on the viewing computer:
+**Frame rate** sets the capture target from 1–60 FPS. Defaults are 1920 pixels and 20 FPS. Lower values reduce the amount of image data captured and sent.
 
-```bash
-ssh -N -o ExitOnForwardFailure=yes -L 127.0.0.1:15901:127.0.0.1:5901 YOUR_USER@YOUR_MAC
-```
+## Viewers
 
-Connect TigerVNC Viewer to `127.0.0.1::15901`. Keep the terminal open. See the [first connection guide](first-connection.md) for SSH setup and the local-access limitations of this recipe.
+- **Viewer decides:** clients can share the session or request exclusive access.
+- **Allow multiple viewers:** new viewers join without disconnecting existing ones.
+- **One viewer at a time:** new connections are rejected while a viewer is connected.
 
-These listeners share displays from the same Mac session. They do not create isolated user desktops. Remote input affects the shared Mac.
+Each listener accepts at most eight clients. All listeners share the logged-in Mac session.
 
-## Make a listener view-only
+## Remote control
 
-Turn off **Allow keyboard and mouse** and choose **Apply & restart**. After reconnecting, check that remote clicks and typing no longer affect the Mac.
+Turn off **Allow keyboard and mouse** for view-only access. This blocks remote keyboard, pointer, and incoming clipboard changes. Viewers still receive the screen and outgoing clipboard contents.
 
-This also blocks incoming clipboard changes. Viewers can still receive screen and outgoing clipboard contents, including anything private on the selected display.
+## Security and password
 
-## When a display changes
+With **Encrypted + password** off, the listener has no VNC authentication or encryption. Keep it on loopback and use the [connection guide](first-connection.md) for SSH or Tailscale access.
 
-If you unplug a monitor or change the display arrangement, reopen Vinny and confirm the selected display before reconnecting. A disconnected selection must be replaced with a connected display. Changing a server's configuration restarts that listener and disconnects its clients.
+With **Encrypted + password** on, Vinny uses VeNCrypt/X509Plain. The viewer must support that mode; TigerVNC does. Vinny creates a self-signed certificate when the server starts, so its fingerprint changes when the listener is recreated. Verify certificates through a trusted channel, or use an authenticated tunnel. Passwords are stored in the macOS Keychain.
+
+**Legacy authentication (unencrypted)** also allows clients such as macOS Screen Sharing to use classic VNC password authentication. Enable **Encrypted + password** first to reveal this option. Legacy passwords are limited to 1–8 bytes; ASCII characters each use one byte. Legacy sessions remain unencrypted even though the parent option is enabled, so use SSH or Tailscale.
+
+See the [security model](threat-model.md) for details.
+
+## Listen on and port
+
+**Listen on** takes an IPv4 or IPv6 address. `127.0.0.1` accepts connections only on this Mac. Binding to a network address makes the listener reachable on that interface, subject to firewall rules. `0.0.0.0` listens on all IPv4 interfaces.
+
+Ports range from 1–65535. The default is `5900`. New configurations choose the next unused configured port, but another application may already occupy it.
+
+## Add or remove a server
+
+Use **Add server** to share another display on a separate port. Select its display, enable it, and apply. With SSH or Tailscale Serve, forward that listener's port separately. **Remove** deletes the server configuration and stops its listener.
