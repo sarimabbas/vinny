@@ -14,15 +14,13 @@
   <nav class="guide-nav" aria-label="Guide navigation"><a href="/">vinny</a></nav>
   <article>
 <h1>Tailscale guide</h1>
-<p>Tailscale connects your devices over an encrypted private network. You can connect directly to Vinny using the Mac's <a href="https://tailscale.com/docs/features/magicdns">MagicDNS name</a>, or use <a href="https://tailscale.com/docs/features/tailscale-serve">Serve</a> to forward a tailnet port to Vinny on localhost.</p>
+<p>Tailscale connects your devices over an encrypted private network. You can connect directly to Vinny over Tailscale, or use <a href="https://tailscale.com/docs/features/tailscale-serve">Serve</a> to forward a tailnet port to Vinny on localhost.</p>
 <h2>Connect your devices</h2>
 <p>Install <a href="https://tailscale.com/download">Tailscale</a> on the shared Mac and the viewing device, and connect both to your tailnet. Check that your tailnet access rules allow the viewing device to reach the Mac on TCP port <code>5900</code>.</p>
 <p>Open Vinny, grant its permissions, and choose a display. Set the listener address using one of the options below, then enable the server. Choose a VNC authentication mode from the <a href="/guides/connection/">connection guide</a>. For Apple's Screen Sharing, enable the legacy password option.</p>
-<h2>Option 1: Connect directly with MagicDNS</h2>
-<p>With MagicDNS enabled in your tailnet and Tailscale DNS enabled on the viewing device, use the Mac's device name, such as <code>my-mac</code>, in your VNC client. Its Tailscale IP works too.</p>
-<p>In Vinny, set <strong>Listen on</strong> to the Mac's numeric Tailscale IPv4 address, shown in the Tailscale app, and keep port <code>5900</code>. The address field takes an IP, not a MagicDNS name. Choose <strong>Apply &amp; restart</strong> and confirm the listener starts. Allow inbound connections to Vinny in the Mac's firewall if needed.</p>
-<p>Connect from the other device using <code>my-mac::5900</code> in TigerVNC, <code>vnc://my-mac:5900</code> in Screen Sharing, or host <code>my-mac</code> and port <code>5900</code> in another client. Replace <code>my-mac</code> with your Mac's actual name. Use the authentication settings described above.</p>
-<p>MagicDNS only resolves the name; Vinny still needs a reachable listener. If the name fails, try the Tailscale IP. If Vinny cannot bind that IP on your Tailscale installation, use Serve below. Binding to <code>0.0.0.0</code> also listens on LAN interfaces, so it does not limit access to Tailscale.</p>
+<h2>Option 1: Connect directly</h2>
+<p>In Vinny, set <strong>Listen on</strong> to the Mac's Tailscale IP and keep port <code>5900</code>. Choose <strong>Apply &amp; restart</strong>. Allow inbound connections to Vinny in the Mac's firewall if needed.</p>
+<p>Connect your VNC client to the Mac over Tailscale on port <code>5900</code>, using the authentication settings above. If Vinny cannot bind the Tailscale IP, use Serve below.</p>
 <h2>Option 2: Keep Vinny on localhost with Serve</h2>
 <p>Set Vinny back to <code>127.0.0.1:5900</code> and choose <strong>Apply &amp; restart</strong> before configuring Serve. Use this option when you want Vinny to keep its local-only listener.</p>
 <p>Run these commands on the Mac running Vinny. If <code>tailscale</code> is not found, use the <a href="https://tailscale.com/docs/reference/tailscale-cli?tab=macos">macOS CLI setup</a>. For the app installed at <code>/Applications/Tailscale.app</code>, you can use this alias in your terminal:</p>
