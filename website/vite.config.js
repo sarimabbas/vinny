@@ -8,6 +8,7 @@ export default defineConfig({
     rollupOptions: {
       input: {
         main: entry("./index.html"),
+        notFound: entry("./404.html"),
         connection: entry("./guides/connection/index.html"),
         legacyConnection: entry("./guides/tigervnc-ssh/index.html"),
         settings: entry("./guides/settings/index.html"),
