@@ -8,7 +8,7 @@
 - [Vinny vs macOS Screen Sharing](vinny-vs-screen-sharing.md): viewer compatibility and port conflicts
 - [Connection security](../README.md#connection-security): encrypted and legacy connections
 
-- [Tailscale guide](tailscale.md): private access with Serve
+- [Tailscale guide](tailscale.md): direct access with MagicDNS or Serve
 
 ## Developing Vinny
 

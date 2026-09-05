@@ -14,7 +14,7 @@ The address format varies by client. Some have separate host and port fields; Ti
 
 For access from another device, choose a route:
 
-- **Tailscale:** connect your devices to a private network and forward a tailnet port to Vinny with Serve. Follow the [Tailscale guide](tailscale.md). No SSH session is needed.
+- **Tailscale:** connect your devices to a private network, then reach Vinny directly by its MagicDNS name or through Serve. Follow the [Tailscale guide](tailscale.md). No SSH session is needed.
 - **SSH:** forward a local port from your viewing computer to the Mac. The steps are below.
 - **Direct connection:** bind Vinny to an IP address the viewer can reach and allow that port through the Mac's firewall. Use a client that supports Vinny's VeNCrypt/X509Plain mode with **Encrypted + password**. See the [settings reference](share-selected-display.md) for authentication and certificate details.
 

@@ -23,7 +23,7 @@ Open Vinny and grant Screen Recording and Accessibility. Choose a display and en
 
 The default listener is `127.0.0.1:5900`. To connect from another computer, follow the [connection guide](docs/first-connection.md).
 
-[Settings reference](docs/share-selected-display.md) covers the server controls. The [Tailscale guide](docs/tailscale.md) covers private access through Serve. Closing the window leaves the servers running; quit Vinny to stop them.
+[Settings reference](docs/share-selected-display.md) covers the server controls. The [Tailscale guide](docs/tailscale.md) covers direct access and Serve. Closing the window leaves the servers running; quit Vinny to stop them.
 
 ## Connection security
 
