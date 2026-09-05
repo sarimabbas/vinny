@@ -72,7 +72,7 @@ For view-only access, turn off **Allow keyboard and mouse** in Vinny, choose **A
 
 To finish, disconnect the viewer and press **Control-C** in the SSH terminal. The tunnel closes, while Vinny continues listening locally. Quit Vinny or disable its server when you no longer want to share. You can also turn Remote Login back off if you enabled it only for this session.
 
-[Star Vinny](https://github.com/sarimabbas/vinny) if it helped. For usage feedback, include your macOS version, viewer version, and the step where you got stuck in [a connection feedback issue](https://github.com/sarimabbas/vinny/issues/new/choose). Do not include passwords or private keys.
+For usage feedback, include your macOS version, viewer version, and the step where you got stuck in [a connection feedback issue](https://github.com/sarimabbas/vinny/issues/new/choose). Do not include passwords or private keys.
 
 ## Troubleshooting
 

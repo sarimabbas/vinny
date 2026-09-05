@@ -14,8 +14,6 @@ Vinny is an open-source option for people who want to configure VNC listeners di
 | Configure multiple listeners with different remote-control settings | Vinny lets each listener enable or block remote input. |
 | Read and modify the capture, VNC, or input implementation | Vinny is Apache-2.0 licensed, with its Rust and Swift source in this repository. |
 
-This is a guide to Vinny's workflow, not an exhaustive feature comparison across macOS versions. No comparative performance benchmark is claimed.
-
 ## What you take on with Vinny
 
 You install an additional app and grant Screen Recording and Accessibility permission. You also choose how the viewer reaches the server securely. Vinny starts with an unauthenticated listener on `127.0.0.1`, so a second computer cannot reach that default listener directly.

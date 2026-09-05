@@ -53,9 +53,7 @@ Keep the Developer ID identity and `run.lil.vinny` bundle identifier stable. mac
 
 ### Qualify the user connection guide
 
-The [first connection guide](first-connection.md) follows the current source configuration and the documented TigerVNC port syntax. Source review is not an end-to-end macOS compatibility test. Before a launch, run it on a Mac with a second computer and record the macOS version, Vinny version, viewer version, connection result, and any corrections needed. Include a fresh permission grant, remote keyboard and pointer input, view-only mode after restart, a second display where available, and a reconnect.
-
-Only describe a combination as tested after recording that run. The smoke test covers the local capture handshake, not SSH, viewer UI, or remote input.
+When changing connection behavior or the [first connection guide](first-connection.md), test from a second computer. Check permissions, keyboard and pointer input, view-only mode after restart, display selection, and reconnection. Include the macOS, Vinny, and viewer versions in the test results. The local smoke test covers capture and the RFB handshake; these checks cover the viewer and remote input.
 
 ## Pull requests
 

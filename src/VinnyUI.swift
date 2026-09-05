@@ -906,7 +906,7 @@ private final class VinnyAppDelegate: NSObject, NSApplicationDelegate, NSWindowD
         NSApp.activate(ignoringOtherApps: true)
         let credits = NSMutableAttributedString(string: "Open-source VNC for macOS.\n\n")
         if let url = URL(string: "https://github.com/sarimabbas/vinny") {
-            credits.append(NSAttributedString(string: "Star on GitHub", attributes: [.link: url]))
+            credits.append(NSAttributedString(string: "GitHub", attributes: [.link: url]))
         }
         NSApp.orderFrontStandardAboutPanel(options: [.credits: credits])
     }

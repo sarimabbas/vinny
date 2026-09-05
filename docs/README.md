@@ -15,4 +15,3 @@
 - [Security policy](SECURITY.md): supported versions and vulnerability reports
 - [Threat model](threat-model.md): trust boundaries and known risks
 - [App icon](app-icon.md): source artwork and asset generation
-- [Adoption and launch kit](growth/README.md): growth snapshots, launch drafts, demo recording, and tester protocol
