@@ -6,5 +6,3 @@
 *.p12
 *.p8
 .DS_Store
-__pycache__/
-*.pyc

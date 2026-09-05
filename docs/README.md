@@ -5,7 +5,7 @@
 - [Install](../README.md#install): Homebrew or the Apple Silicon download
 - [First connection with TigerVNC](first-connection.md): permissions, SSH tunnel, and troubleshooting
 - [Share a selected display](share-selected-display.md): capture settings, multiple listeners, and view-only access
-- [Vinny vs built-in Screen Sharing](vinny-vs-screen-sharing.md): choosing based on your workflow
+- [About macOS Screen Sharing](vinny-vs-screen-sharing.md): viewer compatibility and port conflicts
 - [Connection security](../README.md#connection-security): encrypted and legacy connections
 
 ## Developing Vinny

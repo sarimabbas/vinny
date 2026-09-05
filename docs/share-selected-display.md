@@ -1,4 +1,4 @@
-# Share a selected Mac display over VNC
+# Display settings
 
 Vinny lets each server configuration capture one connected display. You can give separate displays their own ports, capture settings, and remote-control policy.
 
@@ -8,7 +8,7 @@ First complete the [TigerVNC connection guide](first-connection.md). The steps b
 
 1. Open Vinny from its menu-bar icon.
 2. In the server card, open **Display** and select the monitor you want to share. Labels include the display name.
-3. Set **Maximum width** and **Frame rate** for the capture. Vinny accepts widths from 320 to 7680 and frame rates from 1 to 60. These are settings, not guaranteed delivered performance. Start with the defaults of 1920 and 20.
+3. Set **Maximum width** and **Frame rate** for the capture. Vinny accepts widths from 320 to 7680 and frame rates from 1 to 60. Start with the defaults of 1920 and 20.
 4. Choose **Apply & restart**, then reconnect your viewer.
 5. Move a window on the selected display and confirm you see the same movement remotely.
 
@@ -32,7 +32,7 @@ These listeners share displays from the same Mac session. They do not create iso
 
 Turn off **Allow keyboard and mouse** and choose **Apply & restart**. After reconnecting, check that remote clicks and typing no longer affect the Mac.
 
-This also blocks incoming clipboard changes. Viewers can still receive screen and outgoing clipboard contents, so view-only is an input restriction rather than a privacy boundary.
+This also blocks incoming clipboard changes. Viewers can still receive screen and outgoing clipboard contents, including anything private on the selected display.
 
 ## When a display changes
 

@@ -547,15 +547,3 @@ serverToggle.checked = false;
 stopServerPreview();
 updatePreviewAddress();
 window.addEventListener("pagehide", () => window.clearTimeout(serverTimer));
-
-
-const copyInstall = document.querySelector("#copy-install");
-const copyStatus = document.querySelector("#copy-status");
-copyInstall.addEventListener("click", async () => {
-  try {
-    await navigator.clipboard.writeText("brew install --cask sarimabbas/tap/vinny");
-    copyStatus.textContent = "Install command copied.";
-  } catch {
-    copyStatus.textContent = "Select and copy the command above.";
-  }
-});
