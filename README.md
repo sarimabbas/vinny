@@ -15,7 +15,7 @@ With Homebrew:
 brew install --cask sarimabbas/tap/vinny
 ```
 
-Or [download v0.2.4 for Apple silicon](https://github.com/sarimabbas/vinny/releases/download/v0.2.4/vinny-0.2.4-macos-arm64.zip), unzip it, and move `Vinny.app` to Applications. [Release notes and checksums](https://github.com/sarimabbas/vinny/releases/latest).
+Or [download v0.2.5 for Apple silicon](https://github.com/sarimabbas/vinny/releases/download/v0.2.5/vinny-0.2.5-macos-arm64.zip), unzip it, and move `Vinny.app` to Applications. [Release notes and checksums](https://github.com/sarimabbas/vinny/releases/latest).
 
 ## Connect
 
