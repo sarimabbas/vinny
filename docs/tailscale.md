@@ -40,14 +40,6 @@ Use the Mac's Tailscale IP or DNS name shown in Serve's output, with port `5900`
 
 Replace `YOUR_MAC` with the actual Tailscale address. If another Serve mapping already uses port 5900, use `--tcp=15900` instead and connect your viewer to port 15900. The destination can remain `127.0.0.1:5900`.
 
-## Why this helps with firewalls
-
-Serve receives the tailnet connection and makes a local connection to Vinny. Vinny can stay on `127.0.0.1`, avoiding the need for a direct inbound connection to its LAN listener. This can help when macOS blocks inbound connections to Vinny.
-
-Tailscale itself still needs to connect, and Serve does not bypass tailnet access rules or every host security product. Router port forwarding is usually unnecessary; Tailscale can use relays when a direct connection is unavailable. See [Tailscale's firewall guidance](https://tailscale.com/docs/reference/faq/firewall-ports).
-
-If it fails, check that both devices are online in Tailscale, inspect `tailscale serve status`, and confirm Vinny is listening on the local destination port. An authentication error means you reached a VNC server; check the client and Vinny security settings next.
-
 ## Stop sharing
 
 Remove this mapping with:
